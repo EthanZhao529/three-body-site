@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>三体 · THREE-BODY | 一场滚动即播放的宇宙</title>
-<meta name="description" content="一座献给《三体》的沉浸式网站:滚动条就是时间轴。" />
+<title>三体 · THREE-BODY</title>
+<meta name="description" content="一座献给《三体》的沉浸式网站:每一页都是一个实时演算的宇宙。" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -15,119 +15,117 @@
   <div class="loader-track"><div id="loaderBar"></div></div>
 </div>
 
-<!-- 舞台:整站唯一的画布,滚动条就是它的时间轴 -->
+<!-- 舞台:全屏画布,每页一个实时场景 -->
 <canvas id="stage"></canvas>
 
 <!-- 顶栏 -->
 <nav id="nav">
   <div class="brand"><span class="brand-mark">Ⅲ</span><span class="brand-text">三体 · THREE-BODY</span></div>
   <div class="nav-links">
-    <a href="#ch1">三体问题</a>
-    <a href="#ch2">乱纪元</a>
-    <a href="#ch3">黑暗森林</a>
-    <a href="#ch4">水滴</a>
-    <a href="#ch5">二向箔</a>
+    <a href="#" data-page="1">演算</a>
+    <a href="#" data-page="2">乱纪元</a>
+    <a href="#" data-page="3">黑暗森林</a>
+    <a href="#" data-page="4">水滴</a>
+    <a href="#" data-page="5">二向箔</a>
   </div>
 </nav>
 
-<!-- HUD 仪表盘(致敬三体实时演算壁纸) -->
+<!-- HUD 仪表盘 -->
 <div id="hud">
   <div class="hud-tl">
     <div class="countdown-label">COUNTDOWN · 倒计时仍在继续</div>
     <div class="countdown" id="countdown">1379:52:40.00</div>
   </div>
   <div class="hud-tr">
-    <div id="hudEra">● 深空 · 接近半人马座</div>
+    <div id="hudEra">● 第一舰队 · 巡航</div>
     <div id="hudDist"></div>
   </div>
-  <div class="hud-bl" id="hudLog">距离目标 4.22 光年 · 巡航中</div>
+  <div class="hud-bl" id="hudLog">目标 太阳系 · 距离 4.22 光年</div>
   <div class="hud-br">
     <button id="perturbBtn" type="button">扰动轨道</button>
+    <button id="resetBtn" type="button">恢复秩序</button>
   </div>
-  <div class="hud-progress"><div id="hudProg"></div></div>
 </div>
 
-<!-- ============ 滚动轨道:六章 ============ -->
-<main id="track">
+<!-- 右侧页码点 -->
+<div id="dots"></div>
 
-  <!-- 序章 -->
-  <section class="ch" id="ch0">
-    <div class="panel hero-panel reveal">
-      <div class="kicker">SCROLL-DRIVEN UNIVERSE · 滚动即播放</div>
+<!-- ============ 六页 ============ -->
+<div id="pages">
+
+  <!-- 第一页 · 舰队 -->
+  <section class="page" id="p0">
+    <div class="panel hero-panel">
+      <div class="kicker">THE TRISOLARAN FLEET · 已启航</div>
       <h1 class="hero-name">三体</h1>
       <div class="hero-line"></div>
-      <p class="hero-sub">这不是一个介绍页面。<br>你手里的滚动条，就是这个宇宙的时间轴——<br>往下，是播放；往回，是倒流。</p>
-      <div class="scroll-cue">SCROLL<span class="scroll-bar"></span></div>
+      <p class="hero-sub">第一舰队正在穿越星海。<br>四百年后，它们抵达太阳系。</p>
+      <div class="scroll-cue">滚动 · 翻页<span class="scroll-bar"></span></div>
     </div>
   </section>
 
-  <!-- 第壹章 三体问题 -->
-  <section class="ch" id="ch1">
-    <div class="panel side-r reveal">
+  <!-- 第二页 · 三体演算 -->
+  <section class="page" id="p1">
+    <div class="panel side-r">
       <div class="ch-no">第壹章</div>
       <h2 class="ch-title">三体问题</h2>
-      <p>三个天体，在彼此的引力中运动。<br>
-        这个问题没有通用解析解——三百年来，无数数学家在它面前止步。</p>
-      <p class="dim">你眼前的三颗恒星正按真实引力实时演算。此刻它们恰好处于罕见的稳定周期解上；
-        右下角有一个按钮，可以亲手把这份秩序毁掉。</p>
+      <p>三个天体，在彼此的引力中运动——<br>没有通用解析解。</p>
+      <p class="dim">眼前的三颗恒星正以 RK4 四阶积分实时演算，此刻恰好处于罕见的稳定周期解。
+        右下角的按钮，可以亲手毁掉这份秩序。</p>
       <p class="quote">"物理规律在时间和空间上是均匀的，<br>但命运不是。"</p>
     </div>
   </section>
 
-  <!-- 第贰章 乱纪元 -->
-  <section class="ch" id="ch2">
-    <div class="panel side-l reveal">
+  <!-- 第三页 · 乱纪元:三日凌空 ⇆ 三飞星 -->
+  <section class="page" id="p2">
+    <div class="panel mini tl">
       <div class="ch-no">第贰章</div>
       <h2 class="ch-title">乱纪元</h2>
-      <p>在三体行星上，太阳的数量与位置无法预测。<br>
-        三日凌空之时，大地被烤成焦土；三日远离之时，大气冻成霜海。</p>
-      <p class="dim">文明在恒纪元里生长，在乱纪元里毁灭——如此往复了一百九十一轮。</p>
-      <p class="quote">"脱水——"</p>
+      <p class="dim">两种最极端的死法，隔着一条界限。</p>
     </div>
+    <div class="split-label hot"><b>三日凌空</b><span>大地熔化 · 脱水！</span></div>
+    <div class="split-label cold"><b>三飞星</b><span>万物冻结 · 严寒</span></div>
+    <div class="split-hint">⇋ 移动鼠标 · 拨动灾难的界限</div>
   </section>
 
-  <!-- 第叁章 黑暗森林 -->
-  <section class="ch" id="ch3">
-    <div class="panel center reveal">
+  <!-- 第四页 · 黑暗森林 -->
+  <section class="page" id="p3">
+    <div class="panel center low">
       <div class="ch-no">第叁章</div>
       <h2 class="ch-title">黑暗森林</h2>
-      <div class="axioms">
-        <div class="axiom"><span class="n">壹</span>生存是文明的第一需要。</div>
-        <div class="axiom"><span class="n">贰</span>文明不断增长和扩张，但宇宙中的物质总量保持不变。</div>
-      </div>
       <p class="quote big">"宇宙就是一座黑暗森林，<br>每个文明都是带枪的猎人。"</p>
       <p class="dim">1420MHz。有人在山顶按下了发射键。<br>——不要回答。不要回答。不要回答。</p>
     </div>
   </section>
 
-  <!-- 第肆章 水滴 -->
-  <section class="ch" id="ch4">
-    <div class="panel side-l reveal">
+  <!-- 第五页 · 水滴 -->
+  <section class="page" id="p4">
+    <div class="panel side-l">
       <div class="ch-no">第肆章</div>
       <h2 class="ch-title">水滴</h2>
-      <p>由强互作用力材料制成的探测器，<br>表面绝对光滑，温度处于绝对零度。</p>
+      <p>强互作用力材料制成，表面绝对光滑。<br>此刻，它正以亚光速掠过星海。</p>
+      <p class="formula">Δt = γΔτ · v = 0.119c</p>
       <p class="dim">人类舰队两千零一十五艘战舰列阵以待。<br>三十分钟后，幸存者不足十分之一。</p>
       <p class="quote">"毁灭你，与你有何相干。"</p>
     </div>
   </section>
 
-  <!-- 终章 二向箔 -->
-  <section class="ch" id="ch5">
-    <div class="panel center reveal">
+  <!-- 第六页 · 二向箔 -->
+  <section class="page" id="p5">
+    <div class="panel center">
       <div class="ch-no">终章</div>
       <h2 class="ch-title">二向箔</h2>
-      <p class="dim">一张看似无害的小纸条，让整个太阳系跌入二维。<br>请注意脚下——降维已经开始。</p>
+      <p class="dim">一张看似无害的小纸条，让整个太阳系跌入二维。</p>
       <p class="quote big">"给岁月以文明，<br>而不是给文明以岁月。"</p>
       <div class="fin">
-        <div class="fin-line"></div>
         <p class="fin-note">向刘慈欣与《三体》致敬 · 本站为粉丝作品，不隶属于任何官方<br>
-          实时演算灵感参考 Wallpaper Engine「三体实时演算」(SYKM)</p>
-        <a class="replay" href="#ch0">⟲ 回到宇宙开端</a>
+          实时演算逻辑借鉴 Wallpaper Engine「三体实时演算」(SYKM) · 全部美术素材为本站自制</p>
+        <a class="replay" href="#" data-page="0">⟲ 回到宇宙开端</a>
       </div>
     </div>
   </section>
 
-</main>
+</div>
 
 <div class="vignette"></div>
 <div class="grain"></div>

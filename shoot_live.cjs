@@ -13,11 +13,11 @@ const CHROME = 'C:\\Users\\13281\\.cache\\hyperframes\\chrome\\chrome-headless-s
   await new Promise(r => setTimeout(r, 4000));
   await p.screenshot({ path: path.join(__dirname, 'shots', 'live_hero.png') });
   await p.evaluate(() => {
-    document.querySelectorAll('.reveal').forEach(e => e.classList.add('on'));
-    document.querySelector('#signal').scrollIntoView();
+    const max = document.documentElement.scrollHeight - innerHeight;
+    window.scrollTo(0, max * 0.72);
   });
-  await new Promise(r => setTimeout(r, 1000));
-  await p.screenshot({ path: path.join(__dirname, 'shots', 'live_signal.png') });
+  await new Promise(r => setTimeout(r, 1800));
+  await p.screenshot({ path: path.join(__dirname, 'shots', 'live_droplet.png') });
   console.log('saved; problems:', bad.length ? bad.join(' | ') : 'none');
   await b.close();
 })().catch(e => { console.error('ERR', e.message); process.exit(1); });

@@ -53,6 +53,24 @@ ASSETS = {
         "Abstract orbital diagram made of thin glowing red and white curved light trails "
         "of three celestial bodies weaving a chaotic knot in dark space, long exposure "
         "light painting style, elegant minimalist dark artwork." + NO_TEXT),
+    # 第一页:三体舰队(纯黑底强轮廓光,供 screen 混合叠加做视差层)
+    "fleet_ships": ("1344x768",
+        "A fleet of colossal interstellar warships in loose staggered formation cruising "
+        "through pure black empty space, sleek elongated teardrop-shaped hulls with strong "
+        "cold white rim lighting tracing their silhouettes, pale blue engine exhaust glow "
+        "trailing behind each ship, rear three-quarter view receding into the distance, "
+        "pitch black background, epic cinematic sci-fi concept art, ultra detail." + NO_TEXT),
+    # 第一页:星海底图
+    "starsea": ("1344x768",
+        "An endless dense ocean of stars stretching to infinity, deep space star field "
+        "with faint cold blue and warm gold nebulous veils, majestic and dark, "
+        "ultra-detailed cinematic space photography, pitch black voids between stars." + NO_TEXT),
+    # 第三页:三飞星(极寒)
+    "frozen": ("1344x768",
+        "A frozen alien world at night: endless plain of cracked deep-blue ice under a "
+        "pitch-dark frigid sky, three tiny distant bright stars shining high like cold "
+        "gems, faint cyan aurora shimmer, low blowing snow mist over the ground, deep "
+        "blue and cyan palette, cinematic sci-fi concept art, ultra detailed." + NO_TEXT),
 }
 
 def gen(name):

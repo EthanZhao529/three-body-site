@@ -1,12 +1,14 @@
 /* ============================================================
-   三体 · 滚动线性动画引擎
-   整页滚动条 = 时间轴。全屏 canvas 上的一切都是滚动进度 t 的
-   确定性函数:向下滚是播放,向上滚是严格倒放。
-   借鉴 Wallpaper Engine「三体实时演算」(SYKM):
-   真实引力预演算 + 仪表盘 HUD。
+   三体 · 弹性翻页 × 实时演算
+   每一页都是独立的实时场景;翻页用弹簧动画(带轻微过冲的弹性)。
+   第1↔2页之间有"机位拉远"的镜头衔接。
+   三体演算:RK4 四阶龙格库塔(借鉴 Wallpaper Engine
+   「三体实时演算」by SYKM 的运算逻辑,美术为本站自制)。
    ============================================================ */
 (function () {
   'use strict';
+
+  var PAGES = 6;
 
   /* ---------- 画布 ---------- */
   var cv = document.getElementById('stage');
@@ -18,24 +20,24 @@
     H = cv.height = Math.floor(innerHeight * DPR);
     cv.style.width = innerWidth + 'px';
     cv.style.height = innerHeight + 'px';
+    os.width = W; os.height = H;
     buildStars();
-    measure();
   }
+  var os = document.createElement('canvas');   // 离屏:极寒侧羽化蒙版
+  var osx = os.getContext('2d');
 
-  /* ---------- 工具 ---------- */
   function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
   function lerp(a, b, u) { return a + (b - a) * u; }
-  // 阶段进度:t 在 [a,b] 内 → 0..1
-  function ph(t, a, b) { return clamp01((t - a) / (b - a)); }
   function easeIO(u) { return u * u * (3 - 2 * u); }
 
-  /* ---------- 图片资源 ---------- */
-  var IMGS = { nebula: 'assets/hero_nebula.png', chaos: 'assets/chaotic_era.png',
-               coast: 'assets/red_coast.png', droplet: 'assets/droplet.png' };
-  var img = {}, loaded = 0, total = Object.keys(IMGS).length;
+  /* ---------- 资源 ---------- */
+  var FILES = { nebula: 'assets/hero_nebula.png', chaos: 'assets/chaotic_era.png',
+    coast: 'assets/red_coast.png', droplet: 'assets/droplet.png',
+    fleet: 'assets/fleet_ships.png', starsea: 'assets/starsea.png', frozen: 'assets/frozen.png' };
+  var img = {}, loaded = 0, total = Object.keys(FILES).length;
   var loaderEl = document.getElementById('loader');
   var loaderBar = document.getElementById('loaderBar');
-  Object.keys(IMGS).forEach(function (k) {
+  Object.keys(FILES).forEach(function (k) {
     img[k] = new Image();
     img[k].onload = img[k].onerror = function () {
       loaded++;
@@ -45,83 +47,191 @@
         setTimeout(function () { loaderEl.remove(); }, 900);
       }
     };
-    img[k].src = IMGS[k];
+    img[k].src = FILES[k];
   });
 
-  // 按 cover 规则画满屏图,带缩放中心偏移
-  function drawCover(im, alpha, zoom, oy) {
+  function coverRect(im, zoom) {
+    var s = Math.max(W / im.naturalWidth, H / im.naturalHeight) * (zoom || 1);
+    var dw = im.naturalWidth * s, dh = im.naturalHeight * s;
+    return [(W - dw) / 2, (H - dh) / 2, dw, dh];
+  }
+  function drawCover(c2, im, alpha, zoom, ox, oy) {
     if (!im.complete || !im.naturalWidth || alpha <= 0) return;
-    var iw = im.naturalWidth, ih = im.naturalHeight;
-    var s = Math.max(W / iw, H / ih) * (zoom || 1);
-    var dw = iw * s, dh = ih * s;
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(im, (W - dw) / 2, (H - dh) / 2 + (oy || 0) * H, dw, dh);
-    ctx.globalAlpha = 1;
+    var r = coverRect(im, zoom);
+    c2.globalAlpha = alpha;
+    c2.drawImage(im, r[0] + (ox || 0), r[1] + (oy || 0), r[2], r[3]);
+    c2.globalAlpha = 1;
   }
 
-  /* ---------- 三体轨迹预演算(确定性,可反复擦洗) ---------- */
-  var SAMPLES = 2600, SUB = 4, DT = 0.004;
-  var COLS = [
+  /* ---------- 弹性翻页引擎 ---------- */
+  var page = 0;          // 目标页(整数)
+  var pf = 0, pv = 0;    // 弹簧位置/速度
+  var K = 120, C = 13.5; // 刚度/阻尼 → 轻微过冲的弹性
+  var lastFlip = 0;
+  var pagesEl = document.getElementById('pages');
+  var dots = [];
+
+  function go(n) {
+    n = Math.max(0, Math.min(PAGES - 1, n));
+    if (n === page) return;
+    page = n;
+    lastFlip = performance.now();
+    document.querySelectorAll('.page').forEach(function (el, i) {
+      el.classList.toggle('active', i === page);
+    });
+    dots.forEach(function (d, i) { d.classList.toggle('on', i === page); });
+    document.body.className = 'on-p' + page;
+  }
+
+  var acc = 0;
+  addEventListener('wheel', function (e) {
+    e.preventDefault();
+    var now = performance.now();
+    if (now - lastFlip < 550) return;
+    acc += e.deltaY;
+    if (Math.abs(acc) > 40) { go(page + (acc > 0 ? 1 : -1)); acc = 0; }
+  }, { passive: false });
+
+  var ty0 = null;
+  addEventListener('touchstart', function (e) { ty0 = e.touches[0].clientY; }, { passive: true });
+  addEventListener('touchmove', function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  addEventListener('touchend', function (e) {
+    if (ty0 === null) return;
+    var dy = ty0 - e.changedTouches[0].clientY;
+    if (Math.abs(dy) > 55 && performance.now() - lastFlip > 500) go(page + (dy > 0 ? 1 : -1));
+    ty0 = null;
+  }, { passive: true });
+
+  addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(page + 1); }
+    if (e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); go(page - 1); }
+  });
+
+  document.querySelectorAll('[data-page]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.preventDefault();
+      go(parseInt(el.getAttribute('data-page'), 10));
+    });
+  });
+  var dotsWrap = document.getElementById('dots');
+  if (dotsWrap) {
+    for (var di = 0; di < PAGES; di++) {
+      (function (n) {
+        var d = document.createElement('button');
+        d.type = 'button';
+        d.addEventListener('click', function () { go(n); });
+        dotsWrap.appendChild(d); dots.push(d);
+      })(di);
+    }
+    dots[0].classList.add('on');
+  }
+  document.body.className = 'on-p0';
+  var p0 = document.querySelector('.page');
+  if (p0) p0.classList.add('active');
+
+  /* ---------- RK4 三体演算(实时,借鉴壁纸运算逻辑) ---------- */
+  var DT = 0.004;
+  var sim = { b: [], pl: {}, trails: [[], [], []], chaosMode: false };
+  var SIM_COLS = [
     { core: '#fff6e0', mid: '255,196,110', r: 11 },
     { core: '#ffefe6', mid: '255,132,84', r: 9 },
     { core: '#fffdf4', mid: '255,236,190', r: 13 }
   ];
-  function integrate(kick) {
-    var b = [
+  function simReset() {
+    sim.b = [
       { x: -0.97000436, y: 0.24308753, vx: 0.4662036850, vy: 0.4323657300 },
       { x: 0.97000436, y: -0.24308753, vx: 0.4662036850, vy: 0.4323657300 },
       { x: 0, y: 0, vx: -0.93240737, vy: -0.86473146 }
     ];
-    if (kick) { // 固定扰动(确定性混沌)
-      b[0].vx += 0.11; b[1].vy -= 0.09; b[2].vx -= 0.07;
+    sim.pl = { x: 1.7, y: 1.15, vx: -0.34, vy: 0.3 };
+    sim.trails = [[], [], []];
+    sim.chaosMode = false;
+  }
+  simReset();
+  function accAt(px, py, skip) {
+    var ax = 0, ay = 0;
+    for (var i = 0; i < 3; i++) {
+      if (i === skip) continue;
+      var dx = sim.b[i].x - px, dy = sim.b[i].y - py;
+      var d2 = dx * dx + dy * dy + 0.004;
+      var f = 1 / (d2 * Math.sqrt(d2));
+      ax += f * dx; ay += f * dy;
     }
-    var pl = { x: 1.7, y: 1.15, vx: -0.34, vy: 0.3 };
-    var arr = new Float32Array(SAMPLES * 8); // 3太阳xy + 行星xy
-    var era = new Uint8Array(SAMPLES);       // 0 恒纪元 / 1 乱纪元
-    function acc(px, py, skip) {
+    return [ax, ay];
+  }
+  // RK4:对 12 维状态(3体位置+速度)做四阶积分
+  function deriv(st) {
+    // st: [x0,y0,vx0,vy0, x1,...] 长度12
+    var d = new Array(12);
+    for (var i = 0; i < 3; i++) {
       var ax = 0, ay = 0;
-      for (var i = 0; i < 3; i++) {
-        if (i === skip) continue;
-        var dx = b[i].x - px, dy = b[i].y - py;
+      for (var j = 0; j < 3; j++) {
+        if (i === j) continue;
+        var dx = st[j * 4] - st[i * 4], dy = st[j * 4 + 1] - st[i * 4 + 1];
         var d2 = dx * dx + dy * dy + 0.004;
         var f = 1 / (d2 * Math.sqrt(d2));
         ax += f * dx; ay += f * dy;
       }
-      return [ax, ay];
+      d[i * 4] = st[i * 4 + 2]; d[i * 4 + 1] = st[i * 4 + 3];
+      d[i * 4 + 2] = ax; d[i * 4 + 3] = ay;
     }
-    for (var s = 0; s < SAMPLES; s++) {
-      for (var it = 0; it < SUB; it++) {
-        for (var i = 0; i < 3; i++) {
-          var a = acc(b[i].x, b[i].y, i);
-          b[i].vx += a[0] * DT; b[i].vy += a[1] * DT;
-        }
-        for (var j = 0; j < 3; j++) { b[j].x += b[j].vx * DT; b[j].y += b[j].vy * DT; }
-        var pa = acc(pl.x, pl.y, -1);
-        pl.vx += pa[0] * DT; pl.vy += pa[1] * DT;
-        pl.x += pl.vx * DT; pl.y += pl.vy * DT;
-        if (pl.x * pl.x + pl.y * pl.y > 60) { pl.x = 1.7; pl.y = -1.2; pl.vx = -0.3; pl.vy = 0.34; }
-      }
-      for (var k = 0; k < 3; k++) { arr[s * 8 + k * 2] = b[k].x; arr[s * 8 + k * 2 + 1] = b[k].y; }
-      arr[s * 8 + 6] = pl.x; arr[s * 8 + 7] = pl.y;
-      var ds = [];
-      for (var q = 0; q < 3; q++) {
-        var dx2 = b[q].x - pl.x, dy2 = b[q].y - pl.y;
-        ds.push(Math.sqrt(dx2 * dx2 + dy2 * dy2));
-      }
-      ds.sort(function (m, n) { return m - n; });
-      era[s] = ds[0] < ds[1] * 0.45 ? 0 : 1;
-    }
-    return { pos: arr, era: era };
+    return d;
   }
-  var TRAJ_ORDER = integrate(false);
-  var TRAJ_CHAOS = integrate(true);
-  var useChaos = false;
+  function rk4Step() {
+    var st = [];
+    for (var i = 0; i < 3; i++) { st.push(sim.b[i].x, sim.b[i].y, sim.b[i].vx, sim.b[i].vy); }
+    var k1 = deriv(st), s2 = [], j;
+    for (j = 0; j < 12; j++) s2[j] = st[j] + k1[j] * DT / 2;
+    var k2 = deriv(s2), s3 = [];
+    for (j = 0; j < 12; j++) s3[j] = st[j] + k2[j] * DT / 2;
+    var k3 = deriv(s3), s4 = [];
+    for (j = 0; j < 12; j++) s4[j] = st[j] + k3[j] * DT;
+    var k4 = deriv(s4);
+    for (j = 0; j < 12; j++) st[j] += (k1[j] + 2 * k2[j] + 2 * k3[j] + k4[j]) * DT / 6;
+    for (i = 0; i < 3; i++) {
+      sim.b[i].x = st[i * 4]; sim.b[i].y = st[i * 4 + 1];
+      sim.b[i].vx = st[i * 4 + 2]; sim.b[i].vy = st[i * 4 + 3];
+    }
+    // 行星(试探质点,半隐式)
+    var pa = accAt(sim.pl.x, sim.pl.y, -1);
+    sim.pl.vx += pa[0] * DT; sim.pl.vy += pa[1] * DT;
+    sim.pl.x += sim.pl.vx * DT; sim.pl.y += sim.pl.vy * DT;
+    if (sim.pl.x * sim.pl.x + sim.pl.y * sim.pl.y > 60) {
+      sim.pl.x = 1.7; sim.pl.y = -1.2; sim.pl.vx = -0.3; sim.pl.vy = 0.34;
+    }
+  }
+  var trailTick = 0;
+  function simAdvance(steps) {
+    for (var s = 0; s < steps; s++) {
+      rk4Step();
+      if (++trailTick % 3 === 0) {
+        for (var i = 0; i < 3; i++) {
+          sim.trails[i].push([sim.b[i].x, sim.b[i].y]);
+          if (sim.trails[i].length > 240) sim.trails[i].shift();
+        }
+      }
+    }
+    // 恒星飞散 → 恢复秩序
+    for (var q = 0; q < 3; q++) {
+      if (sim.b[q].x * sim.b[q].x + sim.b[q].y * sim.b[q].y > 34) { simReset(); break; }
+    }
+  }
+  var perturbBtn = document.getElementById('perturbBtn');
+  var resetBtn = document.getElementById('resetBtn');
+  if (perturbBtn) perturbBtn.addEventListener('click', function () {
+    for (var i = 0; i < 3; i++) {
+      sim.b[i].vx += (Math.random() - 0.5) * 0.24;
+      sim.b[i].vy += (Math.random() - 0.5) * 0.24;
+    }
+    sim.chaosMode = true;
+  });
+  if (resetBtn) resetBtn.addEventListener('click', simReset);
 
-  /* ---------- 星空(带宇宙闪烁与降维塌缩) ---------- */
+  /* ---------- 星空粒子 ---------- */
   var stars = [];
   function buildStars() {
     stars = [];
-    var n = Math.floor(W * H / (5200 * DPR));
+    var n = Math.floor(W * H / (5600 * DPR));
     for (var i = 0; i < n; i++) {
       stars.push({ x: Math.random() * W, y: Math.random() * H,
         r: (Math.random() * 1.1 + 0.25) * DPR, p: Math.random() * 7, s: Math.random() * 0.8 + 0.3 });
@@ -133,11 +243,10 @@
     if (now - lastFlick > 9000) { flick = 1; lastFlick = now; }
     var g = 1;
     if (flick > 0) { g = 0.25 + 0.75 * Math.abs(Math.cos(flick * Math.PI * 2)); flick -= 0.008; }
-    document.documentElement.style.setProperty('--flick', flick > 0 ? '1' : '0');
     for (var i = 0; i < stars.length; i++) {
       var st = stars[i];
       var tw = 0.4 + 0.45 * Math.abs(Math.sin(now / 1500 * st.s + st.p));
-      var y = collapse > 0 ? lerp(st.y, H * 0.5, easeIO(collapse)) : st.y;
+      var y = collapse > 0 ? lerp(st.y, H * 0.5, easeIO(collapse * ((i % 7) / 7))) : st.y;
       ctx.globalAlpha = alpha * tw * g;
       ctx.fillStyle = (i % 11 === 0) ? '#d8c9b8' : '#eae6dd';
       ctx.beginPath(); ctx.arc(st.x, y, st.r, 0, 7); ctx.fill();
@@ -145,249 +254,396 @@
     ctx.globalAlpha = 1;
   }
 
-  /* ---------- 恒星系统渲染(擦洗到第 idx 帧) ---------- */
-  function drawSystem(alpha, idx) {
-    if (alpha <= 0) return;
-    var T = useChaos ? TRAJ_CHAOS : TRAJ_ORDER;
-    var cx = W / 2, cy = H * 0.46;
-    var sc = Math.min(W, H) / 3.8;
-    var tail = 150;
+  /* ---------- 通用粒子池 ---------- */
+  function makeParts(n, init) {
+    var a = [];
+    for (var i = 0; i < n; i++) { var p = { i: i }; init(p); a.push(p); }
+    return a;
+  }
+  // 舰队页:掠过的星流
+  var flow = makeParts(90, function (p) {
+    p.x = Math.random(); p.y = Math.random(); p.z = Math.random() * 0.8 + 0.2;
+  });
+  // 极寒侧:飘雪
+  var snow = makeParts(150, function (p) {
+    p.x = Math.random(); p.y = Math.random(); p.s = Math.random() * 0.7 + 0.3; p.w = Math.random() * 7;
+  });
+  // 水滴页:亚光速星光拉线
+  var streaks = makeParts(110, function (p) {
+    p.x = Math.random(); p.y = Math.random(); p.z = Math.random() * 0.85 + 0.15;
+    p.hue = Math.random();
+  });
+
+  /* ============================================================
+     场景 0 · 三体舰队穿越星海(动态)
+     ============================================================ */
+  function scene0(a, d, now) {
+    if (a <= 0) return;
+    // 机位拉远:翻向第2页时整个舰队世界缩成远景
+    var pull = easeIO(clamp01(d));
+    var s = 1 - 0.86 * pull;
+    ctx.save();
+    ctx.translate(W / 2, H / 2); ctx.scale(s, s); ctx.translate(-W / 2, -H / 2);
+
+    // 星海底图:缓慢漂移 + 呼吸缩放
+    drawCover(ctx, img.starsea, a, 1.12 + 0.03 * Math.sin(now / 9000), 18 * Math.sin(now / 13000), 10 * Math.sin(now / 17000));
+
+    // 星流:向后掠过(航行感)
+    ctx.globalCompositeOperation = 'lighter';
+    for (var i = 0; i < flow.length; i++) {
+      var p = flow[i];
+      p.x -= 0.00022 * p.z * (16.7);
+      if (p.x < -0.05) { p.x = 1.05; p.y = Math.random(); }
+      var px = p.x * W, py = p.y * H;
+      var len = 26 * DPR * p.z;
+      var al = 0.5 * p.z * a;
+      var gr = ctx.createLinearGradient(px, py, px + len, py);
+      gr.addColorStop(0, 'rgba(210,225,255,' + al.toFixed(3) + ')');
+      gr.addColorStop(1, 'rgba(210,225,255,0)');
+      ctx.strokeStyle = gr; ctx.lineWidth = 1.1 * DPR * p.z;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + len, py); ctx.stroke();
+    }
+    // 舰队:screen 混合(纯黑底自然消隐),缓慢巡航漂移
+    ctx.globalCompositeOperation = 'screen';
+    drawCover(ctx, img.fleet, a,
+      1.04 + 0.025 * Math.sin(now / 8000),
+      26 * Math.sin(now / 11000),
+      10 * Math.sin(now / 5200) + 6 * Math.sin(now / 3100));
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
+  }
+
+  /* ============================================================
+     场景 1 · 三体模型实时演算(RK4)
+     ============================================================ */
+  function scene1(a, d, now) {
+    if (a <= 0) return;
+    // 机位从"舰队近景"继续拉远进场:由大到常
+    var zin = d < 0 ? 1 + 2.4 * easeIO(-d) : 1 + 0.12 * easeIO(clamp01(d));
+    var cx = W / 2, cy = H * 0.47;
+    var sc = Math.min(W, H) / 3.8 / zin;
+    var tint = sim.chaosMode;
+
     ctx.globalCompositeOperation = 'lighter';
     for (var i = 0; i < 3; i++) {
-      var col = useChaos ? '224,64,52' : COLS[i].mid;
-      for (var j = Math.max(1, idx - tail); j <= idx; j++) {
-        var a = (1 - (idx - j) / tail);
-        var x1 = cx + T.pos[(j - 1) * 8 + i * 2] * sc, y1 = cy + T.pos[(j - 1) * 8 + i * 2 + 1] * sc;
-        var x2 = cx + T.pos[j * 8 + i * 2] * sc, y2 = cy + T.pos[j * 8 + i * 2 + 1] * sc;
-        ctx.strokeStyle = 'rgba(' + col + ',' + (a * 0.09 * alpha).toFixed(3) + ')';
+      var tr = sim.trails[i];
+      var col = tint ? '224,64,52' : SIM_COLS[i].mid;
+      for (var j = 1; j < tr.length; j++) {
+        var al = j / tr.length;
+        var x1 = cx + tr[j - 1][0] * sc, y1 = cy + tr[j - 1][1] * sc;
+        var x2 = cx + tr[j][0] * sc, y2 = cy + tr[j][1] * sc;
+        ctx.strokeStyle = 'rgba(' + col + ',' + (al * 0.09 * a).toFixed(3) + ')';
         ctx.lineWidth = 5 * DPR;
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-        ctx.strokeStyle = 'rgba(' + col + ',' + (a * 0.5 * alpha).toFixed(3) + ')';
+        ctx.strokeStyle = 'rgba(' + col + ',' + (al * 0.5 * a).toFixed(3) + ')';
         ctx.lineWidth = 1.4 * DPR;
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
       }
     }
     for (var k = 0; k < 3; k++) {
-      var px = cx + T.pos[idx * 8 + k * 2] * sc, py = cy + T.pos[idx * 8 + k * 2 + 1] * sc;
-      var R = COLS[k].r * DPR;
-      var mid = useChaos ? '224,64,52' : COLS[k].mid;
+      var px = cx + sim.b[k].x * sc, py = cy + sim.b[k].y * sc;
+      var R = SIM_COLS[k].r * DPR / Math.sqrt(zin);
+      var mid = tint ? '224,64,52' : SIM_COLS[k].mid;
       var g1 = ctx.createRadialGradient(px, py, 0, px, py, R * 9);
-      g1.addColorStop(0, 'rgba(' + mid + ',' + 0.3 * alpha + ')');
-      g1.addColorStop(0.4, 'rgba(' + mid + ',' + 0.1 * alpha + ')');
+      g1.addColorStop(0, 'rgba(' + mid + ',' + 0.3 * a + ')');
+      g1.addColorStop(0.4, 'rgba(' + mid + ',' + 0.1 * a + ')');
       g1.addColorStop(1, 'rgba(' + mid + ',0)');
       ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(px, py, R * 9, 0, 7); ctx.fill();
       var g2 = ctx.createRadialGradient(px, py, 0, px, py, R * 3.2);
-      g2.addColorStop(0, 'rgba(' + mid + ',' + 0.85 * alpha + ')');
+      g2.addColorStop(0, 'rgba(' + mid + ',' + 0.85 * a + ')');
       g2.addColorStop(1, 'rgba(' + mid + ',0)');
       ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(px, py, R * 3.2, 0, 7); ctx.fill();
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = COLS[k].core;
-      ctx.beginPath(); ctx.arc(px, py, R, 0, 7); ctx.fill();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = a; ctx.fillStyle = SIM_COLS[k].core;
+      ctx.beginPath(); ctx.arc(px, py, R, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
       var sp = ctx.createLinearGradient(px - R * 7, py, px + R * 7, py);
       sp.addColorStop(0, 'rgba(' + mid + ',0)');
-      sp.addColorStop(0.5, 'rgba(' + mid + ',' + 0.32 * alpha + ')');
+      sp.addColorStop(0.5, 'rgba(' + mid + ',' + 0.32 * a + ')');
       sp.addColorStop(1, 'rgba(' + mid + ',0)');
       ctx.fillStyle = sp; ctx.fillRect(px - R * 7, py - DPR, R * 14, 2 * DPR);
     }
-    // 行星
-    var ppx = cx + T.pos[idx * 8 + 6] * sc, ppy = cy + T.pos[idx * 8 + 7] * sc;
+    var ppx = cx + sim.pl.x * sc, ppy = cy + sim.pl.y * sc;
     var pg = ctx.createRadialGradient(ppx, ppy, 0, ppx, ppy, 13 * DPR);
-    pg.addColorStop(0, 'rgba(150,170,190,' + 0.5 * alpha + ')');
+    pg.addColorStop(0, 'rgba(150,170,190,' + 0.5 * a + ')');
     pg.addColorStop(1, 'rgba(150,170,190,0)');
     ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(ppx, ppy, 13 * DPR, 0, 7); ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#9db2c4';
+    ctx.globalAlpha = a; ctx.fillStyle = '#9db2c4';
     ctx.beginPath(); ctx.arc(ppx, ppy, 4 * DPR, 0, 7); ctx.fill();
     ctx.globalAlpha = 1;
   }
 
-  /* ---------- 水滴 ---------- */
-  function drawDroplet(alpha, u) {
-    var im = img.droplet;
-    if (!im.complete || !im.naturalWidth || alpha <= 0) return;
-    var s = lerp(0.05, 0.95, u * u) * Math.min(W, H) / im.naturalWidth * 1.15;
-    var dw = im.naturalWidth * s, dh = im.naturalHeight * s;
-    var x = lerp(W * 0.72, W * 0.6, u) - dw / 2;
-    var y = lerp(H * 0.3, H * 0.46, u) - dh / 2;
-    // 高速逼近的星光拉线
-    if (u > 0.55) {
-      var k = (u - 0.55) / 0.45;
-      ctx.strokeStyle = 'rgba(234,230,221,' + (0.25 * k * alpha).toFixed(3) + ')';
-      ctx.lineWidth = 1 * DPR;
-      for (var i = 0; i < 14; i++) {
-        var sy = (i * 97 % H), sx = (i * 173 % W);
-        ctx.beginPath(); ctx.moveTo(sx, sy);
-        ctx.lineTo(sx - 60 * DPR * k * (0.4 + i % 3 * 0.4), sy + 14 * DPR * k);
-        ctx.stroke();
-      }
+  /* ============================================================
+     场景 2 · 乱纪元:三日凌空 ⇆ 三飞星(60° 模糊界限随鼠标)
+     ============================================================ */
+  var mouseR = 0.5, mouseSm = 0.5;
+  addEventListener('mousemove', function (e) { mouseR = e.clientX / innerWidth; });
+  addEventListener('touchmove', function (e) {
+    if (e.touches[0]) mouseR = e.touches[0].clientX / innerWidth;
+  }, { passive: true });
+
+  function drawHot(c2, a, now) {
+    // 三日凌空:热浪扭曲(横向切片错位)+ 灼热脉动
+    var im = img.chaos;
+    if (!im.complete || !im.naturalWidth) return;
+    var r = coverRect(im, 1.05 + 0.02 * Math.sin(now / 5000));
+    var strips = 26, sh = Math.ceil(H / strips);
+    var ihPer = im.naturalHeight / (H / sh) / (r[3] / H);
+    c2.globalAlpha = a;
+    for (var i = 0; i < strips; i++) {
+      var sy = i * sh;
+      var off = Math.sin(sy / 44 + now / 260) * 3.2 * DPR * (0.4 + i / strips);
+      var srcY = (sy - r[1]) / r[3] * im.naturalHeight;
+      var srcH = sh / r[3] * im.naturalHeight;
+      if (srcY < 0 || srcY + srcH > im.naturalHeight) continue;
+      c2.drawImage(im, 0, srcY, im.naturalWidth, srcH, r[0] + off, sy, r[2], sh + 1);
     }
-    // screen 模式:图的纯黑底自然消失
-    ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(im, x, y, dw, dh);
+    // 灼热脉动
+    var pulse = 0.1 + 0.06 * Math.sin(now / 900);
+    var g = c2.createRadialGradient(W * 0.5, H * 0.16, 0, W * 0.5, H * 0.16, H * 0.9);
+    g.addColorStop(0, 'rgba(255,190,90,' + (pulse * a).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(255,190,90,0)');
+    c2.fillStyle = g; c2.fillRect(0, 0, W, H);
+    c2.globalAlpha = 1;
+  }
+  function drawCold(c2, a, now) {
+    var im = img.frozen;
+    if (!im.complete || !im.naturalWidth) return;
+    drawCover(c2 === ctx ? ctx : c2, im, a, 1.07 + 0.02 * Math.sin(now / 7000), 14 * Math.sin(now / 9000), 0);
+    // 极光微闪
+    var au = 0.06 + 0.05 * Math.sin(now / 1700);
+    var g = c2.createLinearGradient(0, 0, 0, H * 0.5);
+    g.addColorStop(0, 'rgba(110,230,220,' + (au * a).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(110,230,220,0)');
+    c2.fillStyle = g; c2.fillRect(0, 0, W, H * 0.5);
+    // 飘雪
+    c2.globalAlpha = a;
+    c2.fillStyle = '#dcebf5';
+    for (var i = 0; i < snow.length; i++) {
+      var p = snow[i];
+      var y = (p.y + now / 16000 * p.s) % 1;
+      var x = (p.x + Math.sin(now / 1100 + p.w) * 0.012 + now / 90000 * 0.3) % 1;
+      c2.globalAlpha = a * (0.25 + 0.5 * p.s);
+      c2.beginPath(); c2.arc(x * W, y * H, (0.6 + p.s * 1.6) * DPR, 0, 7); c2.fill();
+    }
+    // 底部吹雪雾
+    var fog = c2.createLinearGradient(0, H * 0.72, 0, H);
+    fog.addColorStop(0, 'rgba(190,215,235,0)');
+    fog.addColorStop(1, 'rgba(190,215,235,' + (0.16 * a + 0.05 * Math.sin(now / 2300) * a).toFixed(3) + ')');
+    c2.fillStyle = fog; c2.fillRect(0, H * 0.72, W, H * 0.28);
+    c2.globalAlpha = 1;
+  }
+  function scene2(a, d, now) {
+    if (a <= 0) return;
+    mouseSm += (mouseR - mouseSm) * 0.07;
+    // 炙烤面打底(alpha 必须传进去,helper 会覆盖外层 globalAlpha)
+    drawHot(ctx, a, now);
+    // 极寒面画进离屏,再用 60° 斜线+羽化蒙版切出右侧
+    osx.clearRect(0, 0, W, H);
+    drawCold(osx, 1, now);
+    var mid = lerp(W * 0.22, W * 0.78, mouseSm);   // 界限在屏中高度处的 x
+    var slope = Math.tan((90 - 60) * Math.PI / 180); // 60°斜率 → 每单位y偏移
+    var feather = 90 * DPR;
+    // 蒙版:沿法线方向的渐变(用斜向线性渐变近似)
+    var nx = Math.cos(Math.PI / 3), ny = Math.sin(Math.PI / 3) * slope; // 近似法线
+    var gx0 = mid - feather, gx1 = mid + feather;
+    var mgrad = osx.createLinearGradient(gx0, H / 2 - feather * slope, gx1, H / 2 + feather * slope);
+    mgrad.addColorStop(0, 'rgba(0,0,0,0)');
+    mgrad.addColorStop(1, 'rgba(0,0,0,1)');
+    osx.globalCompositeOperation = 'destination-in';
+    // 用大平行四边形填充渐变(覆盖整屏,方向垂直于60°界限)
+    osx.fillStyle = mgrad;
+    osx.fillRect(0, 0, W, H);
+    osx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = a;
+    ctx.drawImage(os, 0, 0);
+    // 界限辉光
+    ctx.save();
+    ctx.translate(mid, H / 2);
+    ctx.rotate(-Math.PI / 3 + Math.PI / 2);
+    var lw = ctx.createLinearGradient(-6 * DPR, 0, 6 * DPR, 0);
+    lw.addColorStop(0, 'rgba(234,230,221,0)');
+    lw.addColorStop(0.5, 'rgba(234,230,221,' + (0.22 * a).toFixed(3) + ')');
+    lw.addColorStop(1, 'rgba(234,230,221,0)');
+    ctx.fillStyle = lw;
+    ctx.fillRect(-6 * DPR, -H, 12 * DPR, H * 2);
+    ctx.restore();
     ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'source-over';
   }
 
-  /* ---------- 二向箔降维 ---------- */
-  function drawFoil(u) {
-    if (u <= 0) return;
-    var cy = H * 0.5;
-    var w = easeIO(clamp01(u * 1.4)) * W * 1.1;
-    var glow = 26 * DPR * (0.6 + 0.4 * Math.sin(u * 9));
-    var g = ctx.createLinearGradient(W / 2 - w / 2, 0, W / 2 + w / 2, 0);
-    g.addColorStop(0, 'rgba(125,211,252,0)');
-    g.addColorStop(0.3, 'rgba(125,211,252,' + 0.7 * u + ')');
-    g.addColorStop(0.5, 'rgba(240,240,255,' + 0.9 * u + ')');
-    g.addColorStop(0.7, 'rgba(192,132,252,' + 0.7 * u + ')');
-    g.addColorStop(1, 'rgba(192,132,252,0)');
+  /* ============================================================
+     场景 3 · 黑暗森林:红岸在广播(动态)
+     ============================================================ */
+  var rings = [];
+  function scene3(a, d, now) {
+    if (a <= 0) return;
     ctx.save();
-    ctx.shadowColor = 'rgba(160,180,255,' + 0.8 * u + ')';
-    ctx.shadowBlur = glow;
-    ctx.fillStyle = g;
-    ctx.fillRect(W / 2 - w / 2, cy - 1.4 * DPR, w, 2.8 * DPR);
+    drawCover(ctx, img.coast, 0.9 * a, 1.06 + 0.03 * Math.sin(now / 11000), 10 * Math.sin(now / 9000), 0);
+    // 漂移暗云
+    ctx.globalCompositeOperation = 'multiply';
+    for (var i = 0; i < 2; i++) {
+      var cxp = ((now / (26000 + i * 9000)) % 1.4 - 0.2 + i * 0.5) * W;
+      var cg = ctx.createRadialGradient(cxp, H * (0.2 + i * 0.14), 0, cxp, H * (0.2 + i * 0.14), W * 0.4);
+      cg.addColorStop(0, 'rgba(120,60,50,' + (0.35 * a).toFixed(3) + ')');
+      cg.addColorStop(1, 'rgba(120,60,50,0)');
+      ctx.fillStyle = cg; ctx.fillRect(0, 0, W, H);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    // 天线尖端信标 + 1420MHz 广播圈
+    var bx = W * 0.545, by = H * 0.235;
+    if (rings.length === 0 || now - rings[rings.length - 1].t0 > 2600) rings.push({ t0: now });
+    if (rings.length > 4) rings.shift();
+    ctx.globalCompositeOperation = 'lighter';
+    for (var r = 0; r < rings.length; r++) {
+      var u = (now - rings[r].t0) / 5200;
+      if (u > 1) continue;
+      ctx.strokeStyle = 'rgba(232,86,77,' + ((1 - u) * 0.4 * a).toFixed(3) + ')';
+      ctx.lineWidth = 1.6 * DPR;
+      ctx.beginPath(); ctx.arc(bx, by, u * W * 0.42, 0, 7); ctx.stroke();
+    }
+    var bp = 0.5 + 0.5 * Math.sin(now / 640);
+    var bg2 = ctx.createRadialGradient(bx, by, 0, bx, by, 22 * DPR);
+    bg2.addColorStop(0, 'rgba(232,86,77,' + (0.8 * bp * a).toFixed(3) + ')');
+    bg2.addColorStop(1, 'rgba(232,86,77,0)');
+    ctx.fillStyle = bg2; ctx.beginPath(); ctx.arc(bx, by, 22 * DPR, 0, 7); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
   }
 
-  /* ---------- 章节量尺:由 DOM 实际位置驱动 ---------- */
-  var chs = [], marks = {};
-  function measure() {
-    chs = [];
-    ['ch0', 'ch1', 'ch2', 'ch3', 'ch4', 'ch5'].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) chs.push({ id: id, top: el.offsetTop, h: el.offsetHeight });
-    });
-    var doc = document.documentElement;
-    var max = doc.scrollHeight - innerHeight;
-    marks = {};
-    chs.forEach(function (c) {
-      // 每章的进度锚:章顶进入视口底 → 章底离开视口顶
-      marks[c.id] = { a: clamp01((c.top - innerHeight) / max), b: clamp01((c.top + c.h - innerHeight) / max) };
-    });
-    marks.total = max;
+  /* ============================================================
+     场景 4 · 水滴:亚光速巡航(星光拉线,复刻壁纸质感)
+     ============================================================ */
+  function scene4(a, d, now) {
+    if (a <= 0) return;
+    ctx.globalCompositeOperation = 'lighter';
+    for (var i = 0; i < streaks.length; i++) {
+      var p = streaks[i];
+      p.x -= 0.003 * p.z * 1.4;
+      if (p.x < -0.3) { p.x = 1.1 + Math.random() * 0.2; p.y = Math.random(); }
+      var px = p.x * W, py = p.y * H;
+      var len = (60 + 340 * p.z) * DPR;
+      var al = (0.05 + 0.3 * p.z) * a;
+      var col = p.hue < 0.75 ? '220,228,255' : (p.hue < 0.9 ? '255,220,235' : '190,160,255');
+      var gr = ctx.createLinearGradient(px, py, px + len, py);
+      gr.addColorStop(0, 'rgba(' + col + ',' + al.toFixed(3) + ')');
+      gr.addColorStop(1, 'rgba(' + col + ',0)');
+      ctx.strokeStyle = gr;
+      ctx.lineWidth = (0.8 + p.z * 1.4) * DPR;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + len, py); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'screen';
+    var im = img.droplet;
+    if (im.complete && im.naturalWidth) {
+      var s = (0.42 + 0.02 * Math.sin(now / 3600)) * Math.min(W, H) / im.naturalWidth * 1.6;
+      var dw = im.naturalWidth * s, dh = im.naturalHeight * s;
+      var x = W * 0.56 - dw / 2 + 8 * DPR * Math.sin(now / 5200);
+      var y = H * 0.44 - dh / 2 + 6 * DPR * Math.sin(now / 4100);
+      ctx.save();
+      ctx.translate(x + dw / 2, y + dh / 2);
+      ctx.rotate(-0.16);
+      ctx.globalAlpha = a;
+      ctx.drawImage(im, -dw / 2, -dh / 2, dw, dh);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /* ============================================================
+     场景 5 · 二向箔:持续降维
+     ============================================================ */
+  function scene5(a, d, now) {
+    if (a <= 0) return;
+    var cy = H * 0.5;
+    var u = 0.75 + 0.25 * Math.sin(now / 4000);
+    var w = W * 1.05;
+    var g = ctx.createLinearGradient(W / 2 - w / 2, 0, W / 2 + w / 2, 0);
+    g.addColorStop(0, 'rgba(125,211,252,0)');
+    g.addColorStop(0.3, 'rgba(125,211,252,' + 0.7 * u * a + ')');
+    g.addColorStop(0.5, 'rgba(240,240,255,' + 0.9 * u * a + ')');
+    g.addColorStop(0.7, 'rgba(192,132,252,' + 0.7 * u * a + ')');
+    g.addColorStop(1, 'rgba(192,132,252,0)');
+    ctx.save();
+    ctx.shadowColor = 'rgba(160,180,255,' + 0.8 * u * a + ')';
+    ctx.shadowBlur = 30 * DPR;
+    ctx.fillStyle = g;
+    ctx.fillRect(W / 2 - w / 2, cy - 1.4 * DPR, w, 2.8 * DPR);
+    ctx.restore();
+    // 平面上的倒影微光
+    var rg = ctx.createLinearGradient(0, cy, 0, cy + H * 0.22);
+    rg.addColorStop(0, 'rgba(140,170,255,' + (0.10 * a).toFixed(3) + ')');
+    rg.addColorStop(1, 'rgba(140,170,255,0)');
+    ctx.fillStyle = rg; ctx.fillRect(0, cy, W, H * 0.22);
   }
 
   /* ---------- HUD ---------- */
   var hudEra = document.getElementById('hudEra');
-  var hudLog = document.getElementById('hudLog');
   var hudDist = document.getElementById('hudDist');
-  var hudProg = document.getElementById('hudProg');
-  var perturbBtn = document.getElementById('perturbBtn');
-  var lastEraTxt = '';
-  function setHud(txt, chaos, log) {
-    if (txt !== lastEraTxt && hudEra) {
-      hudEra.textContent = txt;
-      hudEra.classList.toggle('chaos', !!chaos);
-      lastEraTxt = txt;
-    }
+  var hudLog = document.getElementById('hudLog');
+  var lastEra = '';
+  function hud(txt, chaos, log, dist) {
+    if (hudEra && txt !== lastEra) { hudEra.textContent = txt; hudEra.classList.toggle('chaos', !!chaos); lastEra = txt; }
     if (hudLog && log !== undefined && hudLog.textContent !== log) hudLog.textContent = log;
+    if (hudDist && dist !== undefined && hudDist.textContent !== dist) hudDist.textContent = dist;
   }
-  if (perturbBtn) perturbBtn.addEventListener('click', function () {
-    useChaos = !useChaos;
-    perturbBtn.textContent = useChaos ? '恢复秩序' : '扰动轨道';
-  });
+  var HUD_PAGES = [
+    ['● 第一舰队 · 巡航', false, '目标 太阳系 · 距离 4.22 光年'],
+    null, // 实时演算页动态生成
+    ['● 乱纪元 · 两种死法', true, '移动鼠标 · 拨动灾难的界限'],
+    ['● 黑暗森林 · 保持静默', true, '1420MHz 广播中 · 不要回答'],
+    ['● 警告 · 强互作用力探测器', true, 'v = 0.119c · 表面绝对光滑'],
+    ['● 降维打击 · 二维化进行中', true, '太阳系正在跌入二维平面']
+  ];
 
-  /* ---------- 主渲染:一切皆 t 的函数 ---------- */
-  var targetT = 0, curT = 0;
-  function onScroll() {
-    var doc = document.documentElement;
-    var max = doc.scrollHeight - innerHeight;
-    targetT = max > 0 ? (scrollY || doc.scrollTop) / max : 0;
-  }
-  addEventListener('scroll', onScroll, { passive: true });
+  /* ---------- 主循环 ---------- */
+  var lastNow = performance.now();
+  function frame(now) {
+    var dtMs = Math.min(50, now - lastNow); lastNow = now;
+    // 弹簧
+    var dt = dtMs / 1000;
+    pv += (page - pf) * K * dt; pv *= Math.exp(-C * dt);
+    pf += pv * dt;
+    if (Math.abs(page - pf) < 0.0006 && Math.abs(pv) < 0.002) { pf = page; pv = 0; }
+    if (pagesEl) pagesEl.style.transform = 'translateY(' + (-pf * 100) + 'vh)';
 
-  function seg(id) { return marks[id] || { a: 0, b: 0 }; }
-
-  function render(now) {
-    curT += (targetT - curT) * 0.12;           // 平滑擦洗
-    if (Math.abs(targetT - curT) < 0.0004) curT = targetT;
-    var t = curT;
+    // 实时演算持续推进(约 240 步/秒)
+    simAdvance(Math.max(1, Math.round(dtMs * 0.24)));
 
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#070605';
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#070605'; ctx.fillRect(0, 0, W, H);
 
-    var s0 = seg('ch0'), s1 = seg('ch1'), s2 = seg('ch2'),
-        s3 = seg('ch3'), s4 = seg('ch4'), s5 = seg('ch5');
+    function av(i) { return clamp01(1 - Math.abs(pf - i)); }
+    // 星空底(舰队页外全程,乱纪元被日光压暗)
+    var starA = 0.85 * Math.max(av(1), av(3) * 0.7, av(4) * 0.5, av(5));
+    drawStars(now, starA, av(5) > 0.5 ? (0.4 + 0.3 * Math.sin(now / 5000)) : 0);
 
-    /* 星云:序章满屏,随滚动推近,进入三体问题时沉入黑暗 */
-    var zoomU = ph(t, 0, s1.b);
-    var nebA = 1 - easeIO(ph(t, s1.a * 0.55, s1.a + (s1.b - s1.a) * 0.35));
-    drawCover(img.nebula, nebA, 1 + zoomU * 0.55, -zoomU * 0.06);
+    scene0(av(0), pf - 0, now);
+    scene1(av(1), pf - 1, now);
+    scene2(av(2), pf - 2, now);
+    scene3(av(3), pf - 3, now);
+    scene4(av(4), pf - 4, now);
+    scene5(av(5), pf - 5, now);
 
-    /* 恒星系统:三体问题章浮现,乱纪元章淡出 */
-    var sysIn = easeIO(ph(t, s1.a * 0.75, s1.a + (s1.b - s1.a) * 0.3));
-    var sysOut = 1 - easeIO(ph(t, s2.a, s2.a + (s2.b - s2.a) * 0.4));
-    var sysA = Math.min(sysIn, sysOut);
-    if (sysA > 0) {
-      var tau = ph(t, s1.a, s2.a + (s2.b - s2.a) * 0.4);
-      var idx = 1 + Math.floor(tau * (SAMPLES - 2));
-      drawSystem(sysA, idx);
-      var T2 = useChaos ? TRAJ_CHAOS : TRAJ_ORDER;
-      if (sysA > 0.5) {
-        var chaosNow = T2.era[idx] === 1;
-        setHud(useChaos ? '● 已被扰动 · 不可预测' : (chaosNow ? '● 乱纪元' : '● 恒纪元'),
-          chaosNow || useChaos,
-          '数值积分 · 辛欧拉 dt=0.004 · 帧 ' + idx + '/' + SAMPLES);
-        // 恒星-行星距离读数
-        if (hudDist) {
-          var d0 = [];
-          for (var q = 0; q < 3; q++) {
-            var dx = T2.pos[idx * 8 + q * 2] - T2.pos[idx * 8 + 6];
-            var dy = T2.pos[idx * 8 + q * 2 + 1] - T2.pos[idx * 8 + 7];
-            d0.push(Math.sqrt(dx * dx + dy * dy).toFixed(2));
-          }
-          hudDist.textContent = 'd₁ ' + d0[0] + ' · d₂ ' + d0[1] + ' · d₃ ' + d0[2] + ' AU';
-        }
+    // HUD
+    var cur = Math.round(pf);
+    if (cur === 1) {
+      var ds = [];
+      for (var q = 0; q < 3; q++) {
+        var dx = sim.b[q].x - sim.pl.x, dy = sim.b[q].y - sim.pl.y;
+        ds.push(Math.sqrt(dx * dx + dy * dy));
       }
-      if (perturbBtn) perturbBtn.classList.toggle('show', sysA > 0.6);
-    } else {
-      if (perturbBtn) perturbBtn.classList.remove('show');
-      if (hudDist && hudDist.textContent) hudDist.textContent = '';
+      var sorted = ds.slice().sort(function (m, n) { return m - n; });
+      var stable = sorted[0] < sorted[1] * 0.45;
+      hud(sim.chaosMode ? '● 已被扰动 · 不可预测' : (stable ? '● 恒纪元' : '● 乱纪元'),
+        sim.chaosMode || !stable,
+        'RK4 四阶积分 · dt=0.004 · 实时演算中',
+        'd₁ ' + ds[0].toFixed(2) + ' · d₂ ' + ds[1].toFixed(2) + ' · d₃ ' + ds[2].toFixed(2) + ' AU');
+    } else if (HUD_PAGES[cur]) {
+      hud(HUD_PAGES[cur][0], HUD_PAGES[cur][1], HUD_PAGES[cur][2], '');
     }
-    document.body.classList.toggle('past-hero', t > s0.b * 0.85);
-
-    /* 乱纪元:行星地表逼近 */
-    var chA = easeIO(ph(t, s2.a + (s2.b - s2.a) * 0.15, s2.a + (s2.b - s2.a) * 0.5))
-            * (1 - easeIO(ph(t, s3.a, s3.a + (s3.b - s3.a) * 0.35)));
-    drawCover(img.chaos, chA, 1 + ph(t, s2.a, s3.a) * 0.18, 0.02);
-
-    /* 黑暗森林:红岸从暗中升起,又归于沉寂 */
-    var coA = easeIO(ph(t, s3.a + (s3.b - s3.a) * 0.2, s3.a + (s3.b - s3.a) * 0.55))
-            * (1 - easeIO(ph(t, s4.a, s4.a + (s4.b - s4.a) * 0.3))) * 0.85;
-    drawCover(img.coast, coA, 1.06, (1 - ph(t, s3.a, s3.b)) * 0.08);
-
-    /* 星空:贯穿全程;乱纪元白昼淡出;终章向二维塌缩 */
-    var stA = 0.9 * (1 - chA * 0.92) * (1 - coA * 0.45);
-    var collapse = ph(t, s5.a + (s5.b - s5.a) * 0.25, s5.b * 0.99);
-    stA *= (1 - easeIO(ph(t, s5.b * 0.96, 1)) * 0.9);
-    drawStars(now, stA * (0.35 + 0.65 * (1 - nebA * 0.5)), collapse);
-
-    /* 水滴:从深空逼近 */
-    var drU = ph(t, s4.a + (s4.b - s4.a) * 0.1, s4.a + (s4.b - s4.a) * 0.85);
-    var drA = easeIO(ph(t, s4.a, s4.a + (s4.b - s4.a) * 0.25))
-            * (1 - easeIO(ph(t, s5.a, s5.a + (s5.b - s5.a) * 0.3)));
-    if (drA > 0 && drU > 0) drawDroplet(drA, drU);
-
-    /* 二向箔 */
-    drawFoil(easeIO(ph(t, s5.a + (s5.b - s5.a) * 0.3, s5.b * 0.98)));
-
-    /* HUD:非三体问题章的状态文案 */
-    if (sysA <= 0.5) {
-      if (t < s1.a) setHud('● 深空 · 接近半人马座', false, '距离目标 4.22 光年 · 巡航中');
-      else if (chA > 0.3) setHud('● 乱纪元 · 脱水！', true, '地表温度骤变 · 文明第 ' + (137 + Math.floor(t * 100)) + ' 号纪元');
-      else if (coA > 0.2) setHud('● 黑暗森林 · 保持静默', true, '1420MHz 监听中 · 不要回答');
-      else if (drA > 0.3) setHud('● 警告 · 强互作用力探测器', true, '表面绝对光滑 · 无法击穿');
-      else if (t > s5.a) setHud('● 降维打击 · 二维化进行中', true, '太阳系正在跌入二维平面');
-    }
-    if (hudProg) hudProg.style.width = (t * 100).toFixed(2) + '%';
-
-    requestAnimationFrame(render);
+    requestAnimationFrame(frame);
   }
 
-  /* ---------- 倒计时 ---------- */
+  /* ---------- 倒计时(仅第一页) ---------- */
   (function () {
     var el = document.getElementById('countdown');
     if (!el) return;
@@ -403,16 +659,7 @@
     tick();
   })();
 
-  /* ---------- 文字面板滚动显现 ---------- */
-  var io = new IntersectionObserver(function (es) {
-    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('on'); } });
-  }, { threshold: 0.25 });
-  document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
-
-  /* ---------- 启动 ---------- */
   resize();
   addEventListener('resize', resize);
-  addEventListener('load', measure);
-  onScroll();
-  requestAnimationFrame(render);
+  requestAnimationFrame(frame);
 })();
