@@ -1,0 +1,264 @@
+/* ============================================================
+   三体 · 个人网站 —— 黑暗森林美术馆风
+   近黑底 / 纸白衬线 / 红岸红点缀
+   ============================================================ */
+:root{
+  --bg:#070605;
+  --paper:#eae6dd;
+  --dim:#938d81;
+  --faint:#4d4a44;
+  --red:#c73e36;
+  --red-bright:#e8564d;
+  --line:rgba(234,230,221,.14);
+  --line-strong:rgba(234,230,221,.3);
+  --serif:"Songti SC","STSong","SimSun",Georgia,serif;
+  --sans:"Microsoft YaHei","PingFang SC","Helvetica Neue",sans-serif;
+  --mono:"Cascadia Code","Consolas","JetBrains Mono",monospace;
+}
+*{ margin:0; padding:0; box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+body{
+  background:var(--bg); color:var(--paper);
+  font-family:var(--sans);
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{ background:var(--red); color:#fff; }
+a{ color:inherit; }
+
+/* ---------- 星空画布 ---------- */
+#sky{ position:fixed; inset:0; z-index:0; pointer-events:none; }
+
+/* ---------- 顶栏 ---------- */
+#nav{
+  position:fixed; top:0; left:0; right:0; z-index:40;
+  display:flex; justify-content:space-between; align-items:center;
+  padding:26px 52px;
+  background:linear-gradient(to bottom, rgba(7,6,5,.9), rgba(7,6,5,0));
+}
+.brand{ display:flex; align-items:center; gap:14px; }
+.brand-mark{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:40px; height:40px; border:1px solid var(--red);
+  color:var(--red-bright); font-family:var(--serif); font-size:22px;
+}
+.brand-text{ font-size:14px; letter-spacing:6px; color:var(--dim); }
+.nav-links{ display:flex; gap:34px; }
+.nav-links a{
+  font-family:var(--mono); font-size:12px; letter-spacing:2px;
+  color:var(--dim); text-decoration:none; transition:color .3s;
+}
+.nav-links a:hover{ color:var(--red-bright); }
+
+/* ---------- 序幕 ---------- */
+#hero{
+  position:relative; z-index:1; height:100vh; min-height:700px;
+  display:flex; flex-direction:column; justify-content:center; align-items:center;
+}
+.countdown-wrap{ position:absolute; top:110px; left:52px; }
+.countdown-label{
+  font-family:var(--mono); font-size:11px; letter-spacing:3px;
+  color:var(--faint); margin-bottom:8px;
+}
+.countdown{
+  font-family:var(--mono); font-size:30px; letter-spacing:2px;
+  color:var(--red-bright);
+  text-shadow:0 0 24px rgba(199,62,54,.45);
+  font-variant-numeric:tabular-nums;
+}
+.hero-center{ text-align:center; padding:0 6vw; }
+.hero-kicker{
+  font-family:var(--mono); font-size:12px; letter-spacing:6px;
+  color:var(--dim); margin-bottom:42px;
+}
+.hero-name{
+  font-family:var(--serif); font-weight:400;
+  font-size:clamp(60px, 9vw, 128px);
+  letter-spacing:.08em; line-height:1.1;
+}
+.hero-line{
+  width:72px; height:2px; background:var(--red);
+  margin:52px auto;
+}
+.hero-intro{
+  font-size:17px; letter-spacing:3px; color:var(--dim); line-height:2;
+  max-width:560px; margin:0 auto;
+}
+.hero-foot{
+  position:absolute; bottom:44px; left:0; right:0;
+  display:flex; flex-direction:column; align-items:center; gap:26px;
+}
+.flicker-note{
+  font-family:var(--mono); font-size:12px; letter-spacing:3px;
+  color:var(--faint); transition:color 1s;
+}
+.flicker-note.lit{ color:var(--red-bright); }
+.scroll-cue{
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+  font-family:var(--mono); font-size:10px; letter-spacing:4px; color:var(--faint);
+}
+.scroll-bar{
+  display:block; width:1px; height:52px;
+  background:linear-gradient(to bottom, var(--red), transparent);
+  animation:drip 2.2s ease-in-out infinite;
+  transform-origin:top;
+}
+@keyframes drip{ 0%{transform:scaleY(0)} 55%{transform:scaleY(1)} 100%{transform:scaleY(1); opacity:0} }
+
+/* ---------- 章节通用 ---------- */
+main{ position:relative; z-index:1; }
+.chapter{
+  display:grid; grid-template-columns:260px 1fr; gap:64px;
+  max-width:1360px; margin:0 auto;
+  padding:150px 52px 90px;
+  border-top:1px solid var(--line);
+}
+.chapter-side{ position:relative; }
+.chapter-no{
+  font-family:var(--serif); font-size:30px; letter-spacing:10px;
+  color:var(--red-bright); writing-mode:vertical-rl;
+}
+.chapter-en{
+  position:absolute; top:0; left:64px;
+  font-family:var(--mono); font-size:11px; letter-spacing:5px; color:var(--faint);
+  writing-mode:vertical-rl;
+}
+.chapter-title{
+  font-family:var(--serif); font-weight:400;
+  font-size:clamp(38px,4.4vw,58px); letter-spacing:14px;
+  margin-bottom:38px;
+}
+.lead{
+  font-size:17px; line-height:2.15; letter-spacing:2px; color:var(--paper);
+  max-width:720px; margin-bottom:26px;
+}
+.lead.dim{ color:var(--dim); }
+
+/* 滚动显现 */
+.reveal{ opacity:0; transform:translateY(40px); transition:opacity .9s ease, transform .9s ease; }
+.reveal.on{ opacity:1; transform:none; }
+
+/* ---------- 关于:档案行 ---------- */
+.fact-rows{ margin-top:54px; max-width:720px; }
+.fact{
+  display:grid; grid-template-columns:170px 1fr; gap:24px;
+  padding:20px 2px; border-bottom:1px solid var(--line);
+  font-size:16px; letter-spacing:2px;
+}
+.fact .k{ color:var(--faint); font-family:var(--mono); font-size:13px; letter-spacing:4px; align-self:center; }
+.fact .v{ color:var(--paper); }
+
+/* ---------- 三体问题展台 ---------- */
+.exhibit-box{
+  margin-top:50px; border:1px solid var(--line-strong);
+  background:rgba(10,9,8,.72);
+}
+.exhibit-head{
+  display:flex; align-items:center; justify-content:space-between; gap:20px;
+  padding:16px 24px; border-bottom:1px solid var(--line);
+  font-family:var(--mono); font-size:12px; letter-spacing:2px; color:var(--dim);
+}
+.era-tag{ color:var(--paper); min-width:100px; }
+.era-tag.chaos{ color:var(--red-bright); }
+.exhibit-ops{ display:flex; gap:12px; }
+.exhibit-ops button{
+  font-family:var(--mono); font-size:12px; letter-spacing:2px;
+  color:var(--paper); background:transparent;
+  border:1px solid var(--line-strong); padding:8px 20px; cursor:pointer;
+  transition:all .3s;
+}
+.exhibit-ops button:hover{ border-color:var(--red); color:var(--red-bright); }
+#threebody{ display:block; width:100%; height:560px; }
+.exhibit-foot{
+  display:flex; justify-content:space-between; gap:20px; flex-wrap:wrap;
+  padding:14px 24px; border-top:1px solid var(--line);
+  font-family:var(--mono); font-size:12px; letter-spacing:2px; color:var(--faint);
+}
+#exhibitState{ color:var(--dim); }
+#exhibitState.alert{ color:var(--red-bright); }
+
+/* ---------- 作品 ---------- */
+.works-grid{
+  margin-top:50px; display:grid; grid-template-columns:1fr 1fr; gap:0;
+  border:1px solid var(--line);
+}
+.work{
+  position:relative; padding:44px 42px 38px;
+  border-right:1px solid var(--line); border-bottom:1px solid var(--line);
+  transition:background .4s;
+}
+.work:nth-child(2n){ border-right:none; }
+.work:nth-last-child(-n+2){ border-bottom:none; }
+.work:hover{ background:rgba(234,230,221,.035); }
+.work::before{
+  content:""; position:absolute; left:0; top:0; width:2px; height:0;
+  background:var(--red); transition:height .45s ease;
+}
+.work:hover::before{ height:100%; }
+.work-no{
+  font-family:var(--serif); font-size:20px; color:var(--red-bright);
+  margin-bottom:20px;
+}
+.work-name{
+  font-family:var(--serif); font-weight:400; font-size:26px;
+  letter-spacing:3px; margin-bottom:16px;
+}
+.work-desc{ font-size:15px; line-height:1.95; letter-spacing:1px; color:var(--dim); }
+.work-meta{
+  margin-top:24px; font-family:var(--mono); font-size:12px;
+  letter-spacing:2px; color:var(--faint);
+}
+
+/* ---------- 广播控制台 ---------- */
+.console{
+  margin-top:50px; max-width:720px;
+  border:1px solid var(--line-strong); background:rgba(10,9,8,.72);
+}
+.console-bar{
+  padding:14px 24px; border-bottom:1px solid var(--line);
+  font-family:var(--mono); font-size:12px; letter-spacing:3px; color:var(--dim);
+}
+.console-body{ padding:28px 26px 32px; }
+.cline{
+  font-family:var(--mono); font-size:15px; letter-spacing:1px;
+  color:var(--paper); line-height:2.3;
+}
+.cline .prompt{ color:var(--red-bright); margin-right:14px; }
+.chan-link{ color:var(--paper); text-decoration:none; border-bottom:1px solid var(--faint); transition:all .3s; }
+.chan-link:hover{ color:var(--red-bright); border-color:var(--red); }
+.cursor{ color:var(--red-bright); animation:blink 1.05s steps(1) infinite; margin-left:6px; }
+@keyframes blink{ 50%{ opacity:0 } }
+
+/* ---------- 页脚 ---------- */
+footer{
+  position:relative; z-index:1; text-align:center;
+  padding:120px 20px 70px; border-top:1px solid var(--line);
+  margin-top:60px;
+}
+.foot-quote{
+  font-family:var(--serif); font-size:24px; letter-spacing:6px; color:var(--dim);
+  margin-bottom:30px;
+}
+.foot-meta{
+  font-family:var(--mono); font-size:12px; letter-spacing:2px; color:var(--faint);
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width:900px){
+  #nav{ padding:14px 18px; }
+  .brand-text{ display:none; }
+  .brand-mark{ width:34px; height:34px; font-size:18px; }
+  .nav-links{ gap:14px; }
+  .nav-links a{ font-size:11px; letter-spacing:1px; white-space:nowrap; }
+  .countdown-wrap{ left:22px; top:96px; }
+  .countdown{ font-size:22px; }
+  .chapter{ grid-template-columns:1fr; gap:34px; padding:100px 22px 60px; }
+  .chapter-no{ writing-mode:horizontal-tb; letter-spacing:6px; font-size:22px; }
+  .chapter-en{ position:static; writing-mode:horizontal-tb; margin-top:6px; }
+  .works-grid{ grid-template-columns:1fr; }
+  .work{ border-right:none; }
+  .work:nth-last-child(-n+2){ border-bottom:1px solid var(--line); }
+  .work:last-child{ border-bottom:none; }
+  #threebody{ height:420px; }
+  .exhibit-head{ flex-wrap:wrap; }
+}
