@@ -33,7 +33,7 @@
   /* ---------- 资源 ---------- */
   var FILES = { nebula: 'assets/hero_nebula.png', chaos: 'assets/chaotic_era.png',
     coast: 'assets/red_coast.png', droplet: 'assets/droplet.png',
-    fleet: 'assets/fleet_ships.png', starsea: 'assets/starsea.png', frozen: 'assets/frozen.png' };
+    fleet2: 'assets/fleet_lightspeed.png', frozen: 'assets/frozen.png' };
   var img = {}, loaded = 0, total = Object.keys(FILES).length;
   var loaderEl = document.getElementById('loader');
   var loaderBar = document.getElementById('loaderBar');
@@ -296,9 +296,12 @@
     for (var i = 0; i < n; i++) { var p = { i: i }; init(p); a.push(p); }
     return a;
   }
-  // 舰队页:掠过的星流
-  var flow = makeParts(90, function (p) {
-    p.x = Math.random(); p.y = Math.random(); p.z = Math.random() * 0.8 + 0.2;
+  // 舰队页:向消失点收敛的光速星流(与曲率航迹同向)
+  var warp = makeParts(85, function (p) {
+    p.ang = Math.random() * Math.PI * 2;
+    p.r = 0.15 + Math.random() * 1.0;          // 相对最大半径
+    p.s = Math.random() * 0.8 + 0.25;          // 收敛速度
+    p.b = Math.random() < 0.16;                // 少数更亮的"脉冲"
   });
   // 极寒侧:飘雪
   var snow = makeParts(150, function (p) {
@@ -313,38 +316,51 @@
   /* ============================================================
      场景 0 · 三体舰队穿越星海(动态)
      ============================================================ */
+  // 消失点在图内的分数坐标(曲率航迹的汇聚处)
+  var VP_FX = 0.895, VP_FY = 0.44;
   function scene0(a, d, now) {
     if (a <= 0) return;
+    var im2 = img.fleet2;
+    if (!im2.complete || !im2.naturalWidth) return;
     // 机位拉远:翻向第2页时整个舰队世界缩成远景
     var pull = easeIO(clamp01(d));
     var s = 1 - 0.86 * pull;
     ctx.save();
     ctx.translate(W / 2, H / 2); ctx.scale(s, s); ctx.translate(-W / 2, -H / 2);
 
-    // 星海底图:缓慢漂移 + 呼吸缩放
-    drawCover(ctx, img.starsea, a, 1.12 + 0.03 * Math.sin(now / 9000), 18 * Math.sin(now / 13000), 10 * Math.sin(now / 17000));
+    // 舰队大图:锚定消失点的极缓推近 + 轻微起伏(航行呼吸感)
+    var r = coverRect(im2, 1.06);
+    var vpx = r[0] + VP_FX * r[2], vpy = r[1] + VP_FY * r[3];
+    var z = 1.035 + 0.045 * Math.sin(now / 24000);
+    ctx.save();
+    ctx.translate(vpx, vpy); ctx.scale(z, z); ctx.translate(-vpx, -vpy);
+    ctx.globalAlpha = a;
+    ctx.drawImage(im2, r[0], r[1] + 4 * DPR * Math.sin(now / 5200), r[2], r[3]);
+    ctx.globalAlpha = 1;
+    ctx.restore();
 
-    // 星流:向后掠过(航行感)
+    // 光速航行:全屏星流向消失点收敛(与舰队同速前进,宇宙向后掠去)
+    var maxR = Math.sqrt(W * W + H * H) * 1.12;
     ctx.globalCompositeOperation = 'lighter';
-    for (var i = 0; i < flow.length; i++) {
-      var p = flow[i];
-      p.x -= 0.00022 * p.z * (16.7);
-      if (p.x < -0.05) { p.x = 1.05; p.y = Math.random(); }
-      var px = p.x * W, py = p.y * H;
-      var len = 26 * DPR * p.z;
-      var al = 0.5 * p.z * a;
-      var gr = ctx.createLinearGradient(px, py, px + len, py);
-      gr.addColorStop(0, 'rgba(210,225,255,' + al.toFixed(3) + ')');
-      gr.addColorStop(1, 'rgba(210,225,255,0)');
-      ctx.strokeStyle = gr; ctx.lineWidth = 1.1 * DPR * p.z;
-      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + len, py); ctx.stroke();
+    for (var i = 0; i < warp.length; i++) {
+      var p = warp[i];
+      p.r *= (1 - 0.0075 * p.s);                    // 指数收敛
+      if (p.r < 0.02) { p.r = 0.55 + Math.random() * 0.6; p.ang = Math.random() * Math.PI * 2; }
+      var rad = p.r * maxR;
+      var px = vpx + Math.cos(p.ang) * rad;
+      var py = vpy + Math.sin(p.ang) * rad;
+      if (px < -80 || px > W + 80 || py < -80 || py > H + 80) continue;
+      var len = Math.min(90 * DPR, rad * 0.075) * (p.b ? 1.7 : 1);
+      var fade = clamp01(rad / (140 * DPR)) * clamp01((1.05 - p.r) * 4);
+      var al = a * fade * (p.b ? 0.4 : 0.07 + 0.14 * p.s);
+      var tx = px + Math.cos(p.ang) * len, ty = py + Math.sin(p.ang) * len;
+      var gr = ctx.createLinearGradient(px, py, tx, ty);
+      gr.addColorStop(0, 'rgba(198,220,255,' + al.toFixed(3) + ')');
+      gr.addColorStop(1, 'rgba(198,220,255,0)');
+      ctx.strokeStyle = gr;
+      ctx.lineWidth = (p.b ? 1.7 : 1.1) * DPR;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(tx, ty); ctx.stroke();
     }
-    // 舰队:screen 混合(纯黑底自然消隐),缓慢巡航漂移
-    ctx.globalCompositeOperation = 'screen';
-    drawCover(ctx, img.fleet, a,
-      1.04 + 0.025 * Math.sin(now / 8000),
-      26 * Math.sin(now / 11000),
-      10 * Math.sin(now / 5200) + 6 * Math.sin(now / 3100));
     ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
   }
@@ -630,7 +646,7 @@
     if (hudDist && dist !== undefined && hudDist.textContent !== dist) hudDist.textContent = dist;
   }
   var HUD_PAGES = [
-    ['● 第一舰队 · 巡航', false, '目标 太阳系 · 距离 4.22 光年'],
+    ['● 第二舰队 · 曲率驱动', false, '415 艘 · v = c · 目标 太阳系'],
     null, // 实时演算页动态生成
     ['● 乱纪元 · 两种死法', true, '移动鼠标 · 拨动灾难的界限'],
     ['● 黑暗森林 · 保持静默', true, '1420MHz 广播中 · 不要回答'],

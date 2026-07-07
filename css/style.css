@@ -197,7 +197,8 @@ body.on-p1 .hud-br{ opacity:1; pointer-events:auto; }
   line-height:1; text-shadow:0 8px 80px rgba(0,0,0,.9);
 }
 .hero-line{ width:72px; height:2px; background:var(--red); margin:48px auto; }
-.hero-sub{ font-size:17px; letter-spacing:3px; line-height:2.2; color:var(--dim); }
+.hero-sub{ font-size:17px; letter-spacing:3px; line-height:2.2; color:#c9c2b4;
+  text-shadow:0 2px 22px rgba(0,0,0,.95), 0 0 6px rgba(0,0,0,.9); }
 .scroll-cue{
   margin-top:56px; display:flex; flex-direction:column; align-items:center; gap:10px;
   font-family:var(--mono); font-size:10px; letter-spacing:4px; color:var(--faint);
