@@ -354,6 +354,7 @@
      ============================================================ */
   function scene1(a, d, now) {
     if (a <= 0) return;
+    if (window.__use3D) return;   // Three.js 层接管(sim3d.js)
     // 机位从"舰队近景"继续拉远进场:由大到常
     var zin = d < 0 ? 1 + 2.4 * easeIO(-d) : 1 + 0.12 * easeIO(clamp01(d));
     var cx = W / 2, cy = H * 0.47;
@@ -651,6 +652,9 @@
     // 实时演算持续推进(约 240 步/秒) + 视角惯性
     simAdvance(Math.max(1, Math.round(dtMs * 0.24)));
     rotAdvance();
+    // 暴露给 Three.js 渲染层
+    window.__sim = sim; window.__rot = rot;
+    window.__view = { a: clamp01(1 - Math.abs(pf - 1)), d: pf - 1 };
 
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#070605'; ctx.fillRect(0, 0, W, H);

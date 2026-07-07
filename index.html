@@ -17,6 +17,8 @@
 
 <!-- 舞台:全屏画布,每页一个实时场景 -->
 <canvas id="stage"></canvas>
+<!-- 三体演算页的 Three.js 真 3D 层 -->
+<canvas id="gl"></canvas>
 
 <!-- 顶栏 -->
 <nav id="nav">
@@ -132,5 +134,9 @@
 <div class="grain"></div>
 
 <script src="js/main.js"></script>
+<script type="importmap">
+{ "imports": { "three": "./js/vendor/three.module.js" } }
+</script>
+<script type="module" src="js/sim3d.js"></script>
 </body>
 </html>
