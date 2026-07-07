@@ -231,7 +231,8 @@
     return { x: x * cY + z1 * sY, y: y1, z: -x * sY + z1 * cY };
   }
   function dragOK(e) {
-    return page === 1 && !(e.target && e.target.closest && e.target.closest('.panel, .hud-br, #nav, #dots'));
+    return (page === 1 || page === 4) &&
+      !(e.target && e.target.closest && e.target.closest('.panel, .hud-br, #nav, #dots'));
   }
   addEventListener('mousedown', function (e) {
     if (!dragOK(e) || e.button !== 0) return;
@@ -316,19 +317,10 @@
   /* ============================================================
      场景 0 · 三体舰队穿越星海(动态)
      ============================================================ */
-  /* ---------- 首页视频层(图生视频;失败自动回退 canvas 动效) ---------- */
-  var fv = document.getElementById('fleetVideo');
-  var fvOK = false;
-  if (fv) {
-    fv.addEventListener('canplay', function () { fvOK = true; });
-    fv.addEventListener('error', function () { fvOK = false; }, true);
-  }
-
   // 消失点在图内的分数坐标(曲率航迹的汇聚处)
   var VP_FX = 0.895, VP_FY = 0.44;
   function scene0(a, d, now) {
     if (a <= 0) return;
-    if (fvOK) return;   // 视频层接管
     var im2 = img.fleet2;
     if (!im2.complete || !im2.naturalWidth) return;
     // 机位拉远:翻向第2页时整个舰队世界缩成远景
@@ -583,6 +575,7 @@
      ============================================================ */
   function scene4(a, d, now) {
     if (a <= 0) return;
+    if (window.__use3D) return;   // Three.js 水滴场景接管
     ctx.globalCompositeOperation = 'lighter';
     for (var i = 0; i < streaks.length; i++) {
       var p = streaks[i];
@@ -677,22 +670,11 @@
     // 实时演算持续推进(约 240 步/秒) + 视角惯性
     simAdvance(Math.max(1, Math.round(dtMs * 0.24)));
     rotAdvance();
-    // 暴露给 Three.js 渲染层
+    // 暴露给 Three.js 渲染层(演算页 + 水滴页)
     window.__sim = sim; window.__rot = rot;
-    window.__view = { a: clamp01(1 - Math.abs(pf - 1)), d: pf - 1 };
+    window.__view = { a1: clamp01(1 - Math.abs(pf - 1)), d1: pf - 1,
+                      a4: clamp01(1 - Math.abs(pf - 4)), d4: pf - 4 };
 
-    // 首页视频:透明度随页,翻页时同样"机位拉远"
-    if (fv) {
-      var a0v = clamp01(1 - Math.abs(pf - 0));
-      if (a0v <= 0.004 || !fvOK) {
-        if (fv.style.opacity !== '0') fv.style.opacity = '0';
-        if (fvOK && !fv.paused) fv.pause();
-      } else {
-        fv.style.opacity = a0v.toFixed(3);
-        fv.style.transform = 'scale(' + (1 - 0.86 * easeIO(clamp01(pf))).toFixed(4) + ')';
-        if (fv.paused) { var pp = fv.play(); if (pp && pp.catch) pp.catch(function () {}); }
-      }
-    }
 
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#070605'; ctx.fillRect(0, 0, W, H);

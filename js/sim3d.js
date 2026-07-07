@@ -21,6 +21,21 @@ try {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 200);
 
+  /* ---------- 壁纸原生贴图(从 scene.pkg 解包) ---------- */
+  const texLoader = new THREE.TextureLoader();
+  function loadTex(url) {
+    const t = texLoader.load(url);
+    return t;
+  }
+  // 银河全景天空球(三体演算壁纸的 st2 天空盒)
+  const skyGeo = new THREE.SphereGeometry(80, 48, 32);
+  const skyMat = new THREE.MeshBasicMaterial({
+    map: loadTex('assets/wp/milkyway.jpg'), side: THREE.BackSide,
+    depthWrite: false
+  });
+  const sky = new THREE.Mesh(skyGeo, skyMat);
+  scene.add(sky);
+
   /* ---------- 程序化贴图(全部自制,零外部素材) ---------- */
   // 恒星表面:米粒组织 + 临边昏暗
   function sunTexture() {
@@ -59,7 +74,8 @@ try {
     x.fillStyle = g; x.fillRect(0, 0, s, s);
     return new THREE.CanvasTexture(cv);
   }
-  const sunMap = sunTexture();
+  const sunMap = loadTex('assets/wp/sun_gray.jpg');   // 壁纸 0sun 日面(灰度,染色用)
+  sunMap.colorSpace = THREE.NoColorSpace;
   const glowHard = glowTexture(true);
   const glowSoft = glowTexture(false);
 
@@ -92,12 +108,13 @@ try {
     suns.push({ group: g, core, s1, s2, tint: t, baseCore: new THREE.Color(t.core), baseGlow: new THREE.Color(t.glow) });
   }
 
-  /* ---------- 行星(灰蓝试探质点) ---------- */
+  /* ---------- 行星:地球(壁纸 0dq 贴图 —— 被三日拉扯的就是我们) ---------- */
   const planet = new THREE.Group();
-  planet.add(new THREE.Mesh(
-    new THREE.SphereGeometry(0.024, 24, 16),
-    new THREE.MeshBasicMaterial({ color: 0x9db2c4 })
-  ));
+  const earthBall = new THREE.Mesh(
+    new THREE.SphereGeometry(0.026, 32, 24),
+    new THREE.MeshBasicMaterial({ map: loadTex('assets/wp/earth.jpg') })
+  );
+  planet.add(earthBall);
   const pGlow = new THREE.Sprite(new THREE.SpriteMaterial({
     map: glowSoft, color: 0x96aabe, transparent: true,
     blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.5
@@ -141,9 +158,109 @@ try {
     })));
   })();
 
+  /* ============================================================
+     水滴场景(水滴壁纸移植:0mxx2 星空 + 镜面泪滴 + szcl 尾部光环)
+     ============================================================ */
+  const dropScene = new THREE.Scene();
+  const dropSkyTex = loadTex('assets/wp/droplet_sky.jpg');
+  const dropSky = new THREE.Mesh(
+    new THREE.SphereGeometry(80, 48, 32),
+    new THREE.MeshBasicMaterial({ map: dropSkyTex, side: THREE.BackSide, depthWrite: false })
+  );
+  dropScene.add(dropSky);
+  dropScene.add(new THREE.AmbientLight(0x222633, 1.6));
+  // 绝对光滑的镜面:不打直射光(会留下光斑),全靠银河环境反射成像
+
+  // 泪滴外形:半球头 + 幂律收细的尾
+  function dropletGeometry() {
+    // 单条连续曲线:r(u)=R·sin(π·u^0.62),圆头渐收到针尖,无折痕
+    const pts = [];
+    const R = 0.5, L = 2.0;
+    const N = 64;
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      const r = Math.max(0.0008, R * Math.sin(Math.PI * Math.pow(u, 0.62)));
+      pts.push(new THREE.Vector2(r, -R + u * (L + R)));
+    }
+    pts.push(new THREE.Vector2(0, L));
+    return new THREE.LatheGeometry(pts, 96);
+  }
+  const dropMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, metalness: 1.0, roughness: 0.05, envMapIntensity: 3.2
+  });
+  const droplet = new THREE.Mesh(dropletGeometry(), dropMat);
+  droplet.rotation.z = -Math.PI / 2;   // 尾指 +x,头朝 -x(航向)
+  const dropGroup = new THREE.Group();
+  dropGroup.add(droplet);
+  dropGroup.scale.setScalar(0.68);
+  dropGroup.position.x = 0.1;
+  dropScene.add(dropGroup);
+  // 环境反射:用更亮的银河全景做反射源(暗星空反射会变成黑镜)
+  texLoader.load('assets/wp/milkyway.jpg', function (t) {
+    t.mapping = THREE.EquirectangularReflectionMapping;
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    dropMat.envMap = pmrem.fromEquirectangular(t).texture;
+    dropMat.needsUpdate = true;
+  });
+  // 尾部扩散光环(szcl)
+  const ringMat = new THREE.SpriteMaterial({
+    map: loadTex('assets/wp/rings.png'), transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55,
+    color: 0xbfd6ff
+  });
+  const ringSprite = new THREE.Sprite(ringMat);
+  ringSprite.position.set(1.05, 0, 0);
+  ringSprite.scale.setScalar(1.15);
+  dropGroup.add(ringSprite);
+
+  // 亚光速星流(多普勒:前方蓝移,后方红移 —— 致敬 0mxx3 渐变)
+  function makeStreaks(colorHex, xmin, xmax, n) {
+    const pos = new Float32Array(n * 6);
+    const spd = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = xmin + Math.random() * (xmax - xmin);
+      const y = (Math.random() * 2 - 1) * 16;
+      const z = (Math.random() * 2 - 1) * 16;
+      const len = 2.5 + Math.random() * 6;
+      pos[i * 6] = x; pos[i * 6 + 1] = y; pos[i * 6 + 2] = z;
+      pos[i * 6 + 3] = x - len; pos[i * 6 + 4] = y; pos[i * 6 + 5] = z;
+      spd[i] = 14 + Math.random() * 26;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const m = new THREE.LineBasicMaterial({
+      color: colorHex, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const lines = new THREE.LineSegments(g, m);
+    lines.frustumCulled = false;
+    lines.userData = { spd, xmin, xmax, n };
+    dropScene.add(lines);
+    return lines;
+  }
+  const streaksBlue = makeStreaks(0x9db6ff, -46, -4, 130);  // 前方:蓝移
+  const streaksRed = makeStreaks(0xff9d8a, 4, 46, 130);     // 后方:红移
+  const streaksMid = makeStreaks(0xdce4ff, -30, 30, 90);    // 中性
+  function advanceStreaks(lines, dt) {
+    const p = lines.geometry.attributes.position.array;
+    const u = lines.userData;
+    for (let i = 0; i < u.n; i++) {
+      const dx = u.spd[i] * dt;
+      p[i * 6] += dx; p[i * 6 + 3] += dx;
+      if (p[i * 6 + 3] > u.xmax) {
+        const len = p[i * 6] - p[i * 6 + 3];
+        p[i * 6 + 3] = u.xmin; p[i * 6] = u.xmin + len;
+        p[i * 6 + 1] = p[i * 6 + 4] = (Math.random() * 2 - 1) * 16;
+        p[i * 6 + 2] = p[i * 6 + 5] = (Math.random() * 2 - 1) * 16;
+      }
+    }
+    lines.geometry.attributes.position.needsUpdate = true;
+  }
+
   /* ---------- 泛光后处理 ---------- */
   const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
+  const renderPass = new RenderPass(scene, camera);
+  composer.addPass(renderPass);
   const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.8, 0.4, 0.35);
   composer.addPass(bloom);
 
@@ -160,19 +277,55 @@ try {
   /* ---------- 渲染循环:读 main.js 的物理与视角状态 ---------- */
   const tmpColor = new THREE.Color();
   let chaosMix = 0;
+  let lastT = performance.now();
 
   function frame() {
     requestAnimationFrame(frame);
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
     const st = window.__sim, rot = window.__rot, view = window.__view;
-    if (!st || !rot || !view || view.a <= 0.004) {
+    const a1 = view ? (view.a1 !== undefined ? view.a1 : view.a) : 0;
+    const a4 = view ? (view.a4 || 0) : 0;
+    const alive = Math.max(a1, a4);
+    if (!st || !rot || !view || alive <= 0.004) {
       if (canvas.style.display !== 'none') canvas.style.display = 'none';
       return;
     }
     if (canvas.style.display !== 'block') canvas.style.display = 'block';
-    canvas.style.opacity = Math.min(1, view.a * 1.15).toFixed(3);
+    canvas.style.opacity = Math.min(1, alive * 1.15).toFixed(3);
+
+    /* ===== 水滴场景 ===== */
+    if (a4 > a1) {
+      renderPass.scene = dropScene;
+      dropSky.rotation.y += dt * 0.004;
+      dropGroup.position.y = 0.05 * Math.sin(now / 4200);
+      dropGroup.rotation.z = 0.03 * Math.sin(now / 5100);
+      dropGroup.rotation.y = 0.05 * Math.sin(now / 7300);
+      ringSprite.scale.setScalar(1.1 + 0.18 * Math.sin(now / 1400));
+      ringMat.opacity = 0.5 + 0.22 * Math.sin(now / 950);
+      advanceStreaks(streaksBlue, dt);
+      advanceStreaks(streaksRed, dt);
+      advanceStreaks(streaksMid, dt);
+      const zin4 = view.d4 < 0 ? 1 + 1.8 * Math.pow(-view.d4, 2) * (3 - 2 * -view.d4) : 1;
+      const R4 = 3.4 * zin4;
+      const az4 = (rot.y * 0.6) * Math.PI / 180;
+      const el4 = Math.max(-1.1, Math.min(1.1, (6 - rot.x * 0.6) * Math.PI / 180));
+      const ch4 = R4 * Math.cos(el4);
+      camera.position.set(ch4 * Math.sin(az4) + 0.3, R4 * Math.sin(el4), ch4 * Math.cos(az4));
+      camera.lookAt(0.2, 0, 0);
+      composer.render();
+      return;
+    }
+
+    /* ===== 三体演算场景 ===== */
+    renderPass.scene = scene;
+    sky.rotation.y += dt * 0.0035;             // 银河缓旋(壁纸感)
+    earthBall.rotation.y = now * 0.00025;
 
     // 相机:方位角=拖拽 rotY,仰角=拖拽 rotX;机位拉远接翻页过渡
-    const zin = view.d < 0 ? 1 + 2.4 * Math.pow(-view.d, 2) * (3 - 2 * -view.d) : 1;
+    const d1 = view.d1 !== undefined ? view.d1 : view.d;
+    const zin = d1 < 0 ? 1 + 2.4 * Math.pow(-d1, 2) * (3 - 2 * -d1) : 1;
     const R = 4.1 * zin;
     const azim = rot.y * Math.PI / 180;
     const elev = Math.max(-1.35, Math.min(1.35, (12 - rot.x) * Math.PI / 180));
