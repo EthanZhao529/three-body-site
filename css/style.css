@@ -169,6 +169,11 @@ body{ overflow:hidden; height:100vh; }
 #dots button.on{ background:var(--red-bright); border-color:var(--red-bright);
   box-shadow:0 0 12px rgba(199,62,54,.7); transform:scale(1.3); }
 
+/* 演算页:可拖拽旋转 */
+#p1{ cursor:grab; }
+#p1:active{ cursor:grabbing; }
+#p1 .panel{ cursor:auto; }
+
 /* 按页显隐:倒计时仅第一页,演算按钮仅第二页 */
 .hud-tl{ transition:opacity .6s ease, transform .6s ease; }
 body:not(.on-p0) .hud-tl{ opacity:0; transform:translateY(-12px); }

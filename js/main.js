@@ -129,9 +129,19 @@
   var p0 = document.querySelector('.page');
   if (p0) p0.classList.add('active');
 
-  /* ---------- RK4 三体演算(实时,借鉴壁纸运算逻辑) ---------- */
+  /* ---------- 三体演算:四阶辛算法(Yoshida 1990) + Aarseth 分段线性软化
+     逐行移植自用户提供的「三体实时演算」壁纸(SYKM)scene.pkg 内嵌引擎 ---------- */
   var DT = 0.004;
-  var sim = { b: [], pl: {}, trails: [[], [], []], chaosMode: false };
+  // Yoshida1990 系数(与壁纸引擎一致)
+  var Yw1 = 1.35120719196, Yw0 = -1.70241438392;
+  var Yc1 = Yw1 / 2, Yc2 = (Yw0 + Yw1) / 2, Yc3 = Yc2, Yc4 = Yc1;
+  var Yd1 = Yw1, Yd2 = Yw0, Yd3 = Yw1;
+  // Aarseth 软化(壁纸默认 ras=0.1/k=2.8;此处 ras 调小以保周期解稳定)
+  var RAS = 0.05, KSOFT = 2.8, KRAS = KSOFT * RAS;
+  var BETA = 3 / (KSOFT - 1), ALPHA = 1 - BETA;
+  var DD = 4.5;   // 逃逸重启距离(对质心,壁纸同款)
+
+  var sim = { b: [], pl: {}, trails: [[], [], []], chaosMode: false, civ: 191, lastEraChaos: null };
   var SIM_COLS = [
     { core: '#fff6e0', mid: '255,196,110', r: 11 },
     { core: '#ffefe6', mid: '255,132,84', r: 9 },
@@ -139,82 +149,107 @@
   ];
   function simReset() {
     sim.b = [
-      { x: -0.97000436, y: 0.24308753, vx: 0.4662036850, vy: 0.4323657300 },
-      { x: 0.97000436, y: -0.24308753, vx: 0.4662036850, vy: 0.4323657300 },
-      { x: 0, y: 0, vx: -0.93240737, vy: -0.86473146 }
+      { x: -0.97000436, y: 0.24308753, z: 0, vx: 0.4662036850, vy: 0.4323657300, vz: 0 },
+      { x: 0.97000436, y: -0.24308753, z: 0, vx: 0.4662036850, vy: 0.4323657300, vz: 0 },
+      { x: 0, y: 0, z: 0, vx: -0.93240737, vy: -0.86473146, vz: 0 }
     ];
-    sim.pl = { x: 1.7, y: 1.15, vx: -0.34, vy: 0.3 };
+    sim.pl = { x: 1.7, y: 1.15, z: 0.1, vx: -0.34, vy: 0.3, vz: 0.02 };
     sim.trails = [[], [], []];
     sim.chaosMode = false;
   }
   simReset();
-  function accAt(px, py, skip) {
-    var ax = 0, ay = 0;
+
+  // Aarseth 分段线性软化引力(壁纸 computeAcceleration 的原样移植,G=m=1)
+  function aarsethAcc(px, py, pz, skip) {
+    var ax = 0, ay = 0, az = 0;
     for (var i = 0; i < 3; i++) {
       if (i === skip) continue;
-      var dx = sim.b[i].x - px, dy = sim.b[i].y - py;
-      var d2 = dx * dx + dy * dy + 0.004;
-      var f = 1 / (d2 * Math.sqrt(d2));
-      ax += f * dx; ay += f * dy;
+      var dx = sim.b[i].x - px, dy = sim.b[i].y - py, dz = sim.b[i].z - pz;
+      var d = Math.max(Math.sqrt(dx * dx + dy * dy + dz * dz), 1e-5);
+      var mag;
+      if (d <= RAS) mag = d / (RAS * RAS * RAS);
+      else if (d < KRAS) mag = (ALPHA + BETA * d / RAS) / (d * d);
+      else mag = 1 / (d * d);
+      ax += mag * dx / d; ay += mag * dy / d; az += mag * dz / d;
     }
-    return [ax, ay];
+    return [ax, ay, az];
   }
-  // RK4:对 12 维状态(3体位置+速度)做四阶积分
-  function deriv(st) {
-    // st: [x0,y0,vx0,vy0, x1,...] 长度12
-    var d = new Array(12);
+  function drift(c) {
     for (var i = 0; i < 3; i++) {
-      var ax = 0, ay = 0;
-      for (var j = 0; j < 3; j++) {
-        if (i === j) continue;
-        var dx = st[j * 4] - st[i * 4], dy = st[j * 4 + 1] - st[i * 4 + 1];
-        var d2 = dx * dx + dy * dy + 0.004;
-        var f = 1 / (d2 * Math.sqrt(d2));
-        ax += f * dx; ay += f * dy;
-      }
-      d[i * 4] = st[i * 4 + 2]; d[i * 4 + 1] = st[i * 4 + 3];
-      d[i * 4 + 2] = ax; d[i * 4 + 3] = ay;
+      var b = sim.b[i];
+      b.x += c * DT * b.vx; b.y += c * DT * b.vy; b.z += c * DT * b.vz;
     }
-    return d;
+    sim.pl.x += c * DT * sim.pl.vx; sim.pl.y += c * DT * sim.pl.vy; sim.pl.z += c * DT * sim.pl.vz;
   }
-  function rk4Step() {
-    var st = [];
-    for (var i = 0; i < 3; i++) { st.push(sim.b[i].x, sim.b[i].y, sim.b[i].vx, sim.b[i].vy); }
-    var k1 = deriv(st), s2 = [], j;
-    for (j = 0; j < 12; j++) s2[j] = st[j] + k1[j] * DT / 2;
-    var k2 = deriv(s2), s3 = [];
-    for (j = 0; j < 12; j++) s3[j] = st[j] + k2[j] * DT / 2;
-    var k3 = deriv(s3), s4 = [];
-    for (j = 0; j < 12; j++) s4[j] = st[j] + k3[j] * DT;
-    var k4 = deriv(s4);
-    for (j = 0; j < 12; j++) st[j] += (k1[j] + 2 * k2[j] + 2 * k3[j] + k4[j]) * DT / 6;
-    for (i = 0; i < 3; i++) {
-      sim.b[i].x = st[i * 4]; sim.b[i].y = st[i * 4 + 1];
-      sim.b[i].vx = st[i * 4 + 2]; sim.b[i].vy = st[i * 4 + 3];
+  function kick(d) {
+    var acc = [];
+    for (var i = 0; i < 3; i++) acc.push(aarsethAcc(sim.b[i].x, sim.b[i].y, sim.b[i].z, i));
+    for (var j = 0; j < 3; j++) {
+      sim.b[j].vx += d * DT * acc[j][0];
+      sim.b[j].vy += d * DT * acc[j][1];
+      sim.b[j].vz += d * DT * acc[j][2];
     }
-    // 行星(试探质点,半隐式)
-    var pa = accAt(sim.pl.x, sim.pl.y, -1);
-    sim.pl.vx += pa[0] * DT; sim.pl.vy += pa[1] * DT;
-    sim.pl.x += sim.pl.vx * DT; sim.pl.y += sim.pl.vy * DT;
-    if (sim.pl.x * sim.pl.x + sim.pl.y * sim.pl.y > 60) {
-      sim.pl.x = 1.7; sim.pl.y = -1.2; sim.pl.vx = -0.3; sim.pl.vy = 0.34;
+    var pa = aarsethAcc(sim.pl.x, sim.pl.y, sim.pl.z, -1);
+    sim.pl.vx += d * DT * pa[0]; sim.pl.vy += d * DT * pa[1]; sim.pl.vz += d * DT * pa[2];
+  }
+  // 一步 = 7 段 drift-kick 序列(壁纸 updatePhysics 同款)
+  function yoshidaStep() {
+    drift(Yc1); kick(Yd1); drift(Yc2); kick(Yd2); drift(Yc3); kick(Yd3); drift(Yc4);
+    var p = sim.pl;
+    if (p.x * p.x + p.y * p.y + p.z * p.z > 60) {
+      p.x = 1.7; p.y = -1.2; p.z = 0.1; p.vx = -0.3; p.vy = 0.34; p.vz = 0.02;
     }
   }
   var trailTick = 0;
   function simAdvance(steps) {
     for (var s = 0; s < steps; s++) {
-      rk4Step();
+      yoshidaStep();
       if (++trailTick % 3 === 0) {
         for (var i = 0; i < 3; i++) {
-          sim.trails[i].push([sim.b[i].x, sim.b[i].y]);
+          sim.trails[i].push([sim.b[i].x, sim.b[i].y, sim.b[i].z]);
           if (sim.trails[i].length > 240) sim.trails[i].shift();
         }
       }
     }
-    // 恒星飞散 → 恢复秩序
+    // 质心距离超过 DD → 恢复秩序(壁纸的"重启")
+    var cx = (sim.b[0].x + sim.b[1].x + sim.b[2].x) / 3;
+    var cy2 = (sim.b[0].y + sim.b[1].y + sim.b[2].y) / 3;
+    var cz = (sim.b[0].z + sim.b[1].z + sim.b[2].z) / 3;
     for (var q = 0; q < 3; q++) {
-      if (sim.b[q].x * sim.b[q].x + sim.b[q].y * sim.b[q].y > 34) { simReset(); break; }
+      var rx = sim.b[q].x - cx, ry = sim.b[q].y - cy2, rz = sim.b[q].z - cz;
+      if (Math.sqrt(rx * rx + ry * ry + rz * rz) > DD) { simReset(); break; }
     }
+  }
+
+  /* ---------- 视角旋转(壁纸同款:拖拽+惯性,阻尼0.985;闲时缓慢自旋) ---------- */
+  var rot = { x: -18, y: 0, vx: 0, vy: 0, dragging: false, lx: 0, ly: 0 };
+  function applyRotation(x, y, z) {
+    var ax = -rot.x * Math.PI / 180, ay = rot.y * Math.PI / 180;
+    var cX = Math.cos(ax), sX = Math.sin(ax);
+    var y1 = y * cX - z * sX, z1 = y * sX + z * cX;
+    var cY = Math.cos(ay), sY = Math.sin(ay);
+    return { x: x * cY + z1 * sY, y: y1, z: -x * sY + z1 * cY };
+  }
+  function dragOK(e) {
+    return page === 1 && !(e.target && e.target.closest && e.target.closest('.panel, .hud-br, #nav, #dots'));
+  }
+  addEventListener('mousedown', function (e) {
+    if (!dragOK(e) || e.button !== 0) return;
+    e.preventDefault();   // 阻止拖拽时选中文字
+    rot.dragging = true; rot.lx = e.clientX; rot.ly = e.clientY;
+  });
+  addEventListener('mouseup', function () { rot.dragging = false; });
+  addEventListener('mousemove', function (e) {
+    if (!rot.dragging) return;
+    rot.vy += (e.clientX - rot.lx) * 0.05;
+    rot.vx += (e.clientY - rot.ly) * 0.05;
+    rot.lx = e.clientX; rot.ly = e.clientY;
+  });
+  function rotAdvance() {
+    rot.x += rot.vx; rot.y += rot.vy;
+    rot.vx *= 0.985; rot.vy *= 0.985;             // 壁纸同款阻尼
+    if (!rot.dragging && Math.abs(rot.vy) < 0.02) rot.y += 0.028; // 闲时自旋
+    if (rot.x > 80) rot.x = 80; if (rot.x < -80) rot.x = -80;
   }
   var perturbBtn = document.getElementById('perturbBtn');
   var resetBtn = document.getElementById('resetBtn');
@@ -222,6 +257,7 @@
     for (var i = 0; i < 3; i++) {
       sim.b[i].vx += (Math.random() - 0.5) * 0.24;
       sim.b[i].vy += (Math.random() - 0.5) * 0.24;
+      sim.b[i].vz += (Math.random() - 0.5) * 0.18;  // 冲出轨道平面,拖拽旋转可见
     }
     sim.chaosMode = true;
   });
@@ -328,21 +364,27 @@
     for (var i = 0; i < 3; i++) {
       var tr = sim.trails[i];
       var col = tint ? '224,64,52' : SIM_COLS[i].mid;
-      for (var j = 1; j < tr.length; j++) {
-        var al = j / tr.length;
-        var x1 = cx + tr[j - 1][0] * sc, y1 = cy + tr[j - 1][1] * sc;
-        var x2 = cx + tr[j][0] * sc, y2 = cy + tr[j][1] * sc;
-        ctx.strokeStyle = 'rgba(' + col + ',' + (al * 0.09 * a).toFixed(3) + ')';
-        ctx.lineWidth = 5 * DPR;
-        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-        ctx.strokeStyle = 'rgba(' + col + ',' + (al * 0.5 * a).toFixed(3) + ')';
-        ctx.lineWidth = 1.4 * DPR;
-        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      var prev = null;
+      for (var j = 0; j < tr.length; j++) {
+        var rp = applyRotation(tr[j][0], tr[j][1], tr[j][2]);
+        var pt = [cx + rp.x * sc, cy + rp.y * sc];
+        if (prev) {
+          var al = j / tr.length;
+          ctx.strokeStyle = 'rgba(' + col + ',' + (al * 0.09 * a).toFixed(3) + ')';
+          ctx.lineWidth = 5 * DPR;
+          ctx.beginPath(); ctx.moveTo(prev[0], prev[1]); ctx.lineTo(pt[0], pt[1]); ctx.stroke();
+          ctx.strokeStyle = 'rgba(' + col + ',' + (al * 0.5 * a).toFixed(3) + ')';
+          ctx.lineWidth = 1.4 * DPR;
+          ctx.beginPath(); ctx.moveTo(prev[0], prev[1]); ctx.lineTo(pt[0], pt[1]); ctx.stroke();
+        }
+        prev = pt;
       }
     }
     for (var k = 0; k < 3; k++) {
-      var px = cx + sim.b[k].x * sc, py = cy + sim.b[k].y * sc;
-      var R = SIM_COLS[k].r * DPR / Math.sqrt(zin);
+      var rk = applyRotation(sim.b[k].x, sim.b[k].y, sim.b[k].z);
+      var px = cx + rk.x * sc, py = cy + rk.y * sc;
+      var depth = clamp01(0.5 + rk.z * 0.22);           // 近大远小的深度线索
+      var R = SIM_COLS[k].r * DPR / Math.sqrt(zin) * (0.75 + depth * 0.5);
       var mid = tint ? '224,64,52' : SIM_COLS[k].mid;
       var g1 = ctx.createRadialGradient(px, py, 0, px, py, R * 9);
       g1.addColorStop(0, 'rgba(' + mid + ',' + 0.3 * a + ')');
@@ -361,7 +403,8 @@
       sp.addColorStop(1, 'rgba(' + mid + ',0)');
       ctx.fillStyle = sp; ctx.fillRect(px - R * 7, py - DPR, R * 14, 2 * DPR);
     }
-    var ppx = cx + sim.pl.x * sc, ppy = cy + sim.pl.y * sc;
+    var rpl = applyRotation(sim.pl.x, sim.pl.y, sim.pl.z);
+    var ppx = cx + rpl.x * sc, ppy = cy + rpl.y * sc;
     var pg = ctx.createRadialGradient(ppx, ppy, 0, ppx, ppy, 13 * DPR);
     pg.addColorStop(0, 'rgba(150,170,190,' + 0.5 * a + ')');
     pg.addColorStop(1, 'rgba(150,170,190,0)');
@@ -605,8 +648,9 @@
     if (Math.abs(page - pf) < 0.0006 && Math.abs(pv) < 0.002) { pf = page; pv = 0; }
     if (pagesEl) pagesEl.style.transform = 'translateY(' + (-pf * 100) + 'vh)';
 
-    // 实时演算持续推进(约 240 步/秒)
+    // 实时演算持续推进(约 240 步/秒) + 视角惯性
     simAdvance(Math.max(1, Math.round(dtMs * 0.24)));
+    rotAdvance();
 
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#070605'; ctx.fillRect(0, 0, W, H);
@@ -628,14 +672,18 @@
     if (cur === 1) {
       var ds = [];
       for (var q = 0; q < 3; q++) {
-        var dx = sim.b[q].x - sim.pl.x, dy = sim.b[q].y - sim.pl.y;
-        ds.push(Math.sqrt(dx * dx + dy * dy));
+        var dx = sim.b[q].x - sim.pl.x, dy = sim.b[q].y - sim.pl.y, dz = sim.b[q].z - sim.pl.z;
+        ds.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
       }
       var sorted = ds.slice().sort(function (m, n) { return m - n; });
       var stable = sorted[0] < sorted[1] * 0.45;
+      // 文明计数:恒纪元→乱纪元的瞬间,一轮文明毁灭(致敬壁纸的文明排行榜)
+      var chaosNow = !stable;
+      if (sim.lastEraChaos === false && chaosNow) sim.civ++;
+      sim.lastEraChaos = chaosNow;
       hud(sim.chaosMode ? '● 已被扰动 · 不可预测' : (stable ? '● 恒纪元' : '● 乱纪元'),
         sim.chaosMode || !stable,
-        'RK4 四阶积分 · dt=0.004 · 实时演算中',
+        'Yoshida 四阶辛积分 · Aarseth 软化 · 文明 #' + sim.civ + ' · 拖拽旋转视角',
         'd₁ ' + ds[0].toFixed(2) + ' · d₂ ' + ds[1].toFixed(2) + ' · d₃ ' + ds[2].toFixed(2) + ' AU');
     } else if (HUD_PAGES[cur]) {
       hud(HUD_PAGES[cur][0], HUD_PAGES[cur][1], HUD_PAGES[cur][2], '');
