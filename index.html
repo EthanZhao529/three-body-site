@@ -17,6 +17,12 @@
 
 <!-- 舞台:全屏画布,每页一个实时场景 -->
 <canvas id="stage"></canvas>
+<!-- 首页:舰队光速航行(图生视频,循环) -->
+<video id="fleetVideo" muted loop playsinline autoplay preload="auto"
+  poster="assets/fleet_lightspeed.png">
+  <source src="assets/fleet_cruise.webm" type="video/webm" />
+  <source src="assets/fleet_cruise.mp4" type="video/mp4" />
+</video>
 <!-- 三体演算页的 Three.js 真 3D 层 -->
 <canvas id="gl"></canvas>
 
