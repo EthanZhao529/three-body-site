@@ -3,198 +3,131 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>【你的名字】 · 三体主题个人网站</title>
-<meta name="description" content="一座献给《三体》的个人网站。" />
+<title>三体 · THREE-BODY | 一场滚动即播放的宇宙</title>
+<meta name="description" content="一座献给《三体》的沉浸式网站:滚动条就是时间轴。" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 
-<!-- 全页星空(会发生"宇宙闪烁") -->
-<canvas id="sky"></canvas>
+<!-- 加载幕 -->
+<div id="loader">
+  <div class="loader-word">正在初始化宇宙</div>
+  <div class="loader-track"><div id="loaderBar"></div></div>
+</div>
 
-<!-- ============ 顶栏 ============ -->
+<!-- 舞台:整站唯一的画布,滚动条就是它的时间轴 -->
+<canvas id="stage"></canvas>
+
+<!-- 顶栏 -->
 <nav id="nav">
-  <div class="brand"><span class="brand-mark">Ⅲ</span><span class="brand-text">三体 · 个人站</span></div>
+  <div class="brand"><span class="brand-mark">Ⅲ</span><span class="brand-text">三体 · THREE-BODY</span></div>
   <div class="nav-links">
-    <a href="#about">01 关于</a>
-    <a href="#exhibit">02 三体问题</a>
-    <a href="#works">03 作品</a>
-    <a href="#signal">04 广播</a>
+    <a href="#ch1">三体问题</a>
+    <a href="#ch2">乱纪元</a>
+    <a href="#ch3">黑暗森林</a>
+    <a href="#ch4">水滴</a>
+    <a href="#ch5">二向箔</a>
   </div>
 </nav>
 
-<!-- ============ 序幕 ============ -->
-<header id="hero">
-  <div class="hero-art" id="heroArt"></div>
-  <div class="countdown-wrap">
+<!-- HUD 仪表盘(致敬三体实时演算壁纸) -->
+<div id="hud">
+  <div class="hud-tl">
     <div class="countdown-label">COUNTDOWN · 倒计时仍在继续</div>
     <div class="countdown" id="countdown">1379:52:40.00</div>
   </div>
-
-  <div class="hero-center">
-    <div class="hero-kicker">A PERSONAL SITE · IN MEMORY OF TRISOLARIS</div>
-    <h1 class="hero-name">【你的名字】</h1>
-    <div class="hero-line"></div>
-    <p class="hero-intro">【一句话介绍自己：你是谁，正在做什么】</p>
+  <div class="hud-tr">
+    <div id="hudEra">● 深空 · 接近半人马座</div>
+    <div id="hudDist"></div>
   </div>
-
-  <div class="hero-foot">
-    <div class="flicker-note" id="flickerNote">注意 —— 宇宙每隔一段时间会为你闪烁一次</div>
-    <div class="scroll-cue">SCROLL<span class="scroll-bar"></span></div>
+  <div class="hud-bl" id="hudLog">距离目标 4.22 光年 · 巡航中</div>
+  <div class="hud-br">
+    <button id="perturbBtn" type="button">扰动轨道</button>
   </div>
-</header>
-
-<main>
-
-<!-- ============ 第壹章 关于 ============ -->
-<section id="about" class="chapter">
-  <aside class="chapter-side">
-    <div class="chapter-no">第壹章</div>
-    <div class="chapter-en">ABOUT</div>
-  </aside>
-  <div class="chapter-body">
-    <h2 class="chapter-title">关于我</h2>
-    <div class="about-grid">
-      <div>
-        <p class="lead reveal">【第一段自我介绍占位：三四行，说清楚你是谁、从哪里来、信什么。
-          写好前，这里先替你站岗。】</p>
-        <p class="lead dim reveal">【第二段占位：可以写你正在做的事、你的长期计划，
-          或者你为什么喜欢《三体》。】</p>
-
-        <div class="fact-rows reveal">
-          <div class="fact"><span class="k">所在坐标</span><span class="v">【城市占位】</span></div>
-          <div class="fact"><span class="k">当前状态</span><span class="v">【学习 / 工作占位】</span></div>
-          <div class="fact"><span class="k">正在建造</span><span class="v">【项目占位】</span></div>
-          <div class="fact"><span class="k">思想钢印</span><span class="v">【一句你信奉的话占位】</span></div>
-        </div>
-      </div>
-      <figure class="art-panel reveal">
-        <img src="assets/red_coast.png" alt="红岸基地" />
-        <figcaption>红岸基地 · 一切开始的地方</figcaption>
-      </figure>
-    </div>
-  </div>
-</section>
-
-<!-- ============ 幕间:乱纪元 ============ -->
-<div class="interlude">
-  <img class="interlude-art" id="interludeArt" src="assets/chaotic_era.png" alt="乱纪元" />
-  <div class="interlude-veil"></div>
-  <div class="interlude-cap">
-    <span class="interlude-word">乱纪元</span>
-    <small>CHAOTIC ERA · 三日凌空 · 脱水</small>
-  </div>
+  <div class="hud-progress"><div id="hudProg"></div></div>
 </div>
 
-<!-- ============ 第贰章 三体问题(可交互) ============ -->
-<section id="exhibit" class="chapter">
-  <aside class="chapter-side">
-    <div class="chapter-no">第贰章</div>
-    <div class="chapter-en">THE PROBLEM</div>
-  </aside>
-  <div class="chapter-body">
-    <h2 class="chapter-title">三体问题</h2>
-    <p class="lead reveal">三个天体在引力作用下如何运动？——没有通用解析解。
-      下面这座轨道是真实引力计算的结果：初始时它是罕见的稳定周期解，
-      但只要你出手扰动一次，它就会滑向不可预测。</p>
+<!-- ============ 滚动轨道:六章 ============ -->
+<main id="track">
 
-    <div class="exhibit-box reveal">
-      <div class="exhibit-head">
-        <span class="era-tag" id="eraTag">● 恒纪元</span>
-        <span class="exhibit-title">EXHIBIT 01 · 受限三体系统</span>
-        <span class="exhibit-ops">
-          <button id="perturbBtn" type="button">扰动它</button>
-          <button id="resetBtn" type="button">恢复秩序</button>
-        </span>
-      </div>
-      <canvas id="threebody"></canvas>
-      <div class="exhibit-foot">
-        <span id="exhibitState">系统运行中 · 周期解稳定</span>
-        <span class="hint">灰点是一颗行星 —— 它的天空里，太阳的数量说了不算</span>
-      </div>
+  <!-- 序章 -->
+  <section class="ch" id="ch0">
+    <div class="panel hero-panel reveal">
+      <div class="kicker">SCROLL-DRIVEN UNIVERSE · 滚动即播放</div>
+      <h1 class="hero-name">三体</h1>
+      <div class="hero-line"></div>
+      <p class="hero-sub">这不是一个介绍页面。<br>你手里的滚动条，就是这个宇宙的时间轴——<br>往下，是播放；往回，是倒流。</p>
+      <div class="scroll-cue">SCROLL<span class="scroll-bar"></span></div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ============ 第叁章 作品 ============ -->
-<section id="works" class="chapter">
-  <aside class="chapter-side">
-    <div class="chapter-no">第叁章</div>
-    <div class="chapter-en">WORKS</div>
-  </aside>
-  <div class="chapter-body">
-    <h2 class="chapter-title">作品档案</h2>
-    <p class="lead reveal">【这一段占位：一两句话，说说你做东西的原则或口味。】</p>
-
-    <div class="works-grid">
-      <article class="work reveal">
-        <div class="work-art"><img src="assets/work_ship.png" alt="" /></div>
-        <div class="work-no">Ⅰ</div>
-        <h3 class="work-name">【作品名占位】</h3>
-        <p class="work-desc">【两行以内的作品介绍占位：它是什么、解决什么问题。】</p>
-        <div class="work-meta">【类型占位】 · 【年份占位】</div>
-      </article>
-      <article class="work reveal">
-        <div class="work-art"><img src="assets/work_planet.png" alt="" /></div>
-        <div class="work-no">Ⅱ</div>
-        <h3 class="work-name">【作品名占位】</h3>
-        <p class="work-desc">【两行以内的作品介绍占位：它是什么、解决什么问题。】</p>
-        <div class="work-meta">【类型占位】 · 【年份占位】</div>
-      </article>
-      <article class="work reveal">
-        <div class="work-art"><img src="assets/work_monolith.png" alt="" /></div>
-        <div class="work-no">Ⅲ</div>
-        <h3 class="work-name">【作品名占位】</h3>
-        <p class="work-desc">【两行以内的作品介绍占位：它是什么、解决什么问题。】</p>
-        <div class="work-meta">【类型占位】 · 【年份占位】</div>
-      </article>
-      <article class="work reveal">
-        <div class="work-art"><img src="assets/work_orbits.png" alt="" /></div>
-        <div class="work-no">Ⅳ</div>
-        <h3 class="work-name">【作品名占位】</h3>
-        <p class="work-desc">【两行以内的作品介绍占位：它是什么、解决什么问题。】</p>
-        <div class="work-meta">【类型占位】 · 【年份占位】</div>
-      </article>
+  <!-- 第壹章 三体问题 -->
+  <section class="ch" id="ch1">
+    <div class="panel side-r reveal">
+      <div class="ch-no">第壹章</div>
+      <h2 class="ch-title">三体问题</h2>
+      <p>三个天体，在彼此的引力中运动。<br>
+        这个问题没有通用解析解——三百年来，无数数学家在它面前止步。</p>
+      <p class="dim">你眼前的三颗恒星正按真实引力实时演算。此刻它们恰好处于罕见的稳定周期解上；
+        右下角有一个按钮，可以亲手把这份秩序毁掉。</p>
+      <p class="quote">"物理规律在时间和空间上是均匀的，<br>但命运不是。"</p>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ============ 第肆章 广播 ============ -->
-<section id="signal" class="chapter">
-  <aside class="chapter-side">
-    <div class="chapter-no">第肆章</div>
-    <div class="chapter-en">BROADCAST</div>
-  </aside>
-  <div class="chapter-body">
-    <h2 class="chapter-title">发出信号</h2>
-    <p class="lead reveal">在黑暗森林里暴露坐标是危险的。<br>但我决定冒这个险。</p>
+  <!-- 第贰章 乱纪元 -->
+  <section class="ch" id="ch2">
+    <div class="panel side-l reveal">
+      <div class="ch-no">第贰章</div>
+      <h2 class="ch-title">乱纪元</h2>
+      <p>在三体行星上，太阳的数量与位置无法预测。<br>
+        三日凌空之时，大地被烤成焦土；三日远离之时，大气冻成霜海。</p>
+      <p class="dim">文明在恒纪元里生长，在乱纪元里毁灭——如此往复了一百九十一轮。</p>
+      <p class="quote">"脱水——"</p>
+    </div>
+  </section>
 
-    <div class="signal-grid">
-    <figure class="droplet-fig reveal">
-      <img src="assets/droplet.png" alt="水滴" />
-      <figcaption>水滴 · 强互作用力探测器<br><small>它正朝这里来，大约还有四百年</small></figcaption>
-    </figure>
-    <div class="console reveal">
-      <div class="console-bar">红岸发射系统 · RED COAST TRANSMITTER</div>
-      <div class="console-body" id="consoleBody">
-        <div class="cline"><span class="prompt">&gt;</span> 目标：全宇宙</div>
-        <div class="cline"><span class="prompt">&gt;</span> 频率：1420 MHz</div>
-        <div class="cline"><span class="prompt">&gt;</span> 邮箱：<a class="chan-link" href="#">【你的邮箱占位】</a></div>
-        <div class="cline"><span class="prompt">&gt;</span> 抖音：<a class="chan-link" href="#">【你的抖音号占位】</a></div>
-        <div class="cline"><span class="prompt">&gt;</span> GitHub：<a class="chan-link" href="#">【你的 GitHub 占位】</a></div>
-        <div class="cline"><span class="prompt">&gt;</span> 状态：持续发射中<span class="cursor">▌</span></div>
+  <!-- 第叁章 黑暗森林 -->
+  <section class="ch" id="ch3">
+    <div class="panel center reveal">
+      <div class="ch-no">第叁章</div>
+      <h2 class="ch-title">黑暗森林</h2>
+      <div class="axioms">
+        <div class="axiom"><span class="n">壹</span>生存是文明的第一需要。</div>
+        <div class="axiom"><span class="n">贰</span>文明不断增长和扩张，但宇宙中的物质总量保持不变。</div>
+      </div>
+      <p class="quote big">"宇宙就是一座黑暗森林，<br>每个文明都是带枪的猎人。"</p>
+      <p class="dim">1420MHz。有人在山顶按下了发射键。<br>——不要回答。不要回答。不要回答。</p>
+    </div>
+  </section>
+
+  <!-- 第肆章 水滴 -->
+  <section class="ch" id="ch4">
+    <div class="panel side-l reveal">
+      <div class="ch-no">第肆章</div>
+      <h2 class="ch-title">水滴</h2>
+      <p>由强互作用力材料制成的探测器，<br>表面绝对光滑，温度处于绝对零度。</p>
+      <p class="dim">人类舰队两千零一十五艘战舰列阵以待。<br>三十分钟后，幸存者不足十分之一。</p>
+      <p class="quote">"毁灭你，与你有何相干。"</p>
+    </div>
+  </section>
+
+  <!-- 终章 二向箔 -->
+  <section class="ch" id="ch5">
+    <div class="panel center reveal">
+      <div class="ch-no">终章</div>
+      <h2 class="ch-title">二向箔</h2>
+      <p class="dim">一张看似无害的小纸条，让整个太阳系跌入二维。<br>请注意脚下——降维已经开始。</p>
+      <p class="quote big">"给岁月以文明，<br>而不是给文明以岁月。"</p>
+      <div class="fin">
+        <div class="fin-line"></div>
+        <p class="fin-note">向刘慈欣与《三体》致敬 · 本站为粉丝作品，不隶属于任何官方<br>
+          实时演算灵感参考 Wallpaper Engine「三体实时演算」(SYKM)</p>
+        <a class="replay" href="#ch0">⟲ 回到宇宙开端</a>
       </div>
     </div>
-    </div>
-  </div>
-</section>
+  </section>
 
 </main>
-
-<footer>
-  <div class="foot-quote">"虫子从来没有被真正战胜过。"</div>
-  <div class="foot-meta">© 2026 【你的名字】 · 向《三体》与刘慈欣致敬 · 本站不隶属于任何官方</div>
-</footer>
 
 <div class="vignette"></div>
 <div class="grain"></div>
