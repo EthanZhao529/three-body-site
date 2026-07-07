@@ -12,6 +12,7 @@
   var flicker = 0;          // 0=正常, >0 表示闪烁强度包络
   var lastFlicker = 0;
   var note = document.getElementById('flickerNote');
+  var heroArt = document.getElementById('heroArt');
 
   function resize() {
     c.width = innerWidth;
@@ -41,8 +42,10 @@
       global = 0.25 + 0.75 * Math.abs(Math.cos(flicker * Math.PI * 2)); // 两次明灭
       flicker -= 0.008;
       if (note) note.classList.add('lit');
-    } else if (note) {
-      note.classList.remove('lit');
+      if (heroArt) heroArt.style.opacity = (0.45 + 0.55 * global).toFixed(3); // 星云一起熄灭
+    } else {
+      if (note) note.classList.remove('lit');
+      if (heroArt && heroArt.style.opacity !== '') heroArt.style.opacity = '';
     }
 
     for (var i = 0; i < stars.length; i++) {
@@ -100,9 +103,12 @@
 
   function reset() {
     suns = [
-      { x: -0.97000436, y: 0.24308753, vx: 0.4662036850, vy: 0.4323657300, m: 1 },
-      { x: 0.97000436, y: -0.24308753, vx: 0.4662036850, vy: 0.4323657300, m: 1 },
-      { x: 0, y: 0, vx: -0.93240737, vy: -0.86473146, m: 1 }
+      { x: -0.97000436, y: 0.24308753, vx: 0.4662036850, vy: 0.4323657300, m: 1,
+        core: '#fff6e0', mid: '255,196,110', r: 11 },   // 琥珀
+      { x: 0.97000436, y: -0.24308753, vx: 0.4662036850, vy: 0.4323657300, m: 1,
+        core: '#ffefe6', mid: '255,132,84', r: 9 },     // 红橙
+      { x: 0, y: 0, vx: -0.93240737, vy: -0.86473146, m: 1,
+        core: '#fffdf4', mid: '255,236,190', r: 13 }    // 白金
     ];
     planet = { x: 1.7, y: 1.15, vx: -0.34, vy: 0.3 };
     trails = [[], [], []];
@@ -180,36 +186,74 @@
     var cx = c.width / 2, cy = c.height / 2;
     var scale = Math.min(c.width, c.height) / 3.6;
 
-    // 轨迹(纸白细线,越新越亮;扰动后泛红)
+    // 发光体全部用加色混合(lighter),叠出辉光
+    ctx.globalCompositeOperation = 'lighter';
+
+    // 轨迹:双层——宽而淡的辉光层 + 细而亮的芯线;扰动后转猩红
     for (var i = 0; i < 3; i++) {
       var tr = trails[i];
+      var col = perturbed ? '224,64,52' : suns[i].mid;
       for (var j = 1; j < tr.length; j++) {
-        var a = j / tr.length * (perturbed ? 0.6 : 0.42);
-        ctx.strokeStyle = perturbed
-          ? 'rgba(220,90,80,' + a + ')'
-          : 'rgba(234,230,221,' + a + ')';
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(cx + tr[j - 1][0] * scale, cy + tr[j - 1][1] * scale);
-        ctx.lineTo(cx + tr[j][0] * scale, cy + tr[j][1] * scale);
-        ctx.stroke();
+        var a = j / tr.length;
+        var x1 = cx + tr[j - 1][0] * scale, y1 = cy + tr[j - 1][1] * scale;
+        var x2 = cx + tr[j][0] * scale, y2 = cy + tr[j][1] * scale;
+        ctx.strokeStyle = 'rgba(' + col + ',' + (a * 0.10).toFixed(3) + ')';
+        ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        ctx.strokeStyle = 'rgba(' + col + ',' + (a * 0.55).toFixed(3) + ')';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
       }
     }
-    // 三颗恒星(纸白实心点 + 微光)
+
+    // 三颗恒星:外日冕 → 内辉 → 白热核心 + 十字光芒
     for (var k = 0; k < 3; k++) {
-      var px = cx + suns[k].x * scale, py = cy + suns[k].y * scale;
-      var g = ctx.createRadialGradient(px, py, 0, px, py, 34);
-      g.addColorStop(0, 'rgba(234,230,221,.5)');
-      g.addColorStop(1, 'rgba(234,230,221,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(px, py, 34, 0, 7); ctx.fill();
-      ctx.fillStyle = '#eae6dd';
-      ctx.beginPath(); ctx.arc(px, py, 9, 0, 7); ctx.fill();
+      var s2 = suns[k];
+      var px = cx + s2.x * scale, py = cy + s2.y * scale;
+      var R = s2.r;
+      var mid = perturbed ? '224,64,52' : s2.mid;
+
+      var g1 = ctx.createRadialGradient(px, py, 0, px, py, R * 9);
+      g1.addColorStop(0, 'rgba(' + mid + ',.30)');
+      g1.addColorStop(0.4, 'rgba(' + mid + ',.10)');
+      g1.addColorStop(1, 'rgba(' + mid + ',0)');
+      ctx.fillStyle = g1;
+      ctx.beginPath(); ctx.arc(px, py, R * 9, 0, 7); ctx.fill();
+
+      var g2 = ctx.createRadialGradient(px, py, 0, px, py, R * 3.2);
+      g2.addColorStop(0, 'rgba(' + mid + ',.85)');
+      g2.addColorStop(1, 'rgba(' + mid + ',0)');
+      ctx.fillStyle = g2;
+      ctx.beginPath(); ctx.arc(px, py, R * 3.2, 0, 7); ctx.fill();
+
+      ctx.fillStyle = s2.core;
+      ctx.beginPath(); ctx.arc(px, py, R, 0, 7); ctx.fill();
+
+      // 十字光芒(镜头衍射)
+      var spike = ctx.createLinearGradient(px - R * 7, py, px + R * 7, py);
+      spike.addColorStop(0, 'rgba(' + mid + ',0)');
+      spike.addColorStop(0.5, 'rgba(' + mid + ',.35)');
+      spike.addColorStop(1, 'rgba(' + mid + ',0)');
+      ctx.fillStyle = spike;
+      ctx.fillRect(px - R * 7, py - 0.9, R * 14, 1.8);
+      var spikeV = ctx.createLinearGradient(px, py - R * 5, px, py + R * 5);
+      spikeV.addColorStop(0, 'rgba(' + mid + ',0)');
+      spikeV.addColorStop(0.5, 'rgba(' + mid + ',.3)');
+      spikeV.addColorStop(1, 'rgba(' + mid + ',0)');
+      ctx.fillStyle = spikeV;
+      ctx.fillRect(px - 0.9, py - R * 5, 1.8, R * 10);
     }
-    // 行星(灰点)
+
+    // 行星:冷灰蓝小点 + 微弱光晕(它是唯一不发光的东西,却最重要)
     var ppx = cx + planet.x * scale, ppy = cy + planet.y * scale;
-    ctx.fillStyle = '#8a857a';
-    ctx.beginPath(); ctx.arc(ppx, ppy, 5, 0, 7); ctx.fill();
+    var pg = ctx.createRadialGradient(ppx, ppy, 0, ppx, ppy, 14);
+    pg.addColorStop(0, 'rgba(150,170,190,.5)');
+    pg.addColorStop(1, 'rgba(150,170,190,0)');
+    ctx.fillStyle = pg;
+    ctx.beginPath(); ctx.arc(ppx, ppy, 14, 0, 7); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#9db2c4';
+    ctx.beginPath(); ctx.arc(ppx, ppy, 4.5, 0, 7); ctx.fill();
 
     if (++eraTimer % 30 === 0) updateEra();
     requestAnimationFrame(draw);
@@ -230,6 +274,26 @@
 
   reset();
   requestAnimationFrame(draw);
+})();
+
+/* ---------- 3.5 幕间视差 ---------- */
+(function () {
+  var art = document.getElementById('interludeArt');
+  if (!art) return;
+  var wrap = art.parentElement;
+  var ticking = false;
+  function update() {
+    ticking = false;
+    var r = wrap.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight) return;
+    // 元素中心相对视口中心 -1..1 → 上下平移
+    var k = (r.top + r.height / 2 - innerHeight / 2) / (innerHeight / 2 + r.height / 2);
+    art.style.transform = 'translateY(' + (k * 9).toFixed(2) + '%)';
+  }
+  addEventListener('scroll', function () {
+    if (!ticking) { ticking = true; requestAnimationFrame(update); }
+  }, { passive: true });
+  update();
 })();
 
 /* ---------- 4. 滚动显现 ---------- */

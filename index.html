@@ -25,6 +25,7 @@
 
 <!-- ============ 序幕 ============ -->
 <header id="hero">
+  <div class="hero-art" id="heroArt"></div>
   <div class="countdown-wrap">
     <div class="countdown-label">COUNTDOWN · 倒计时仍在继续</div>
     <div class="countdown" id="countdown">1379:52:40.00</div>
@@ -53,19 +54,37 @@
   </aside>
   <div class="chapter-body">
     <h2 class="chapter-title">关于我</h2>
-    <p class="lead reveal">【第一段自我介绍占位：三四行，说清楚你是谁、从哪里来、信什么。
-      写好前，这里先替你站岗。】</p>
-    <p class="lead dim reveal">【第二段占位：可以写你正在做的事、你的长期计划，
-      或者你为什么喜欢《三体》。】</p>
+    <div class="about-grid">
+      <div>
+        <p class="lead reveal">【第一段自我介绍占位：三四行，说清楚你是谁、从哪里来、信什么。
+          写好前，这里先替你站岗。】</p>
+        <p class="lead dim reveal">【第二段占位：可以写你正在做的事、你的长期计划，
+          或者你为什么喜欢《三体》。】</p>
 
-    <div class="fact-rows reveal">
-      <div class="fact"><span class="k">所在坐标</span><span class="v">【城市占位】</span></div>
-      <div class="fact"><span class="k">当前状态</span><span class="v">【学习 / 工作占位】</span></div>
-      <div class="fact"><span class="k">正在建造</span><span class="v">【项目占位】</span></div>
-      <div class="fact"><span class="k">思想钢印</span><span class="v">【一句你信奉的话占位】</span></div>
+        <div class="fact-rows reveal">
+          <div class="fact"><span class="k">所在坐标</span><span class="v">【城市占位】</span></div>
+          <div class="fact"><span class="k">当前状态</span><span class="v">【学习 / 工作占位】</span></div>
+          <div class="fact"><span class="k">正在建造</span><span class="v">【项目占位】</span></div>
+          <div class="fact"><span class="k">思想钢印</span><span class="v">【一句你信奉的话占位】</span></div>
+        </div>
+      </div>
+      <figure class="art-panel reveal">
+        <img src="assets/red_coast.png" alt="红岸基地" />
+        <figcaption>红岸基地 · 一切开始的地方</figcaption>
+      </figure>
     </div>
   </div>
 </section>
+
+<!-- ============ 幕间:乱纪元 ============ -->
+<div class="interlude">
+  <img class="interlude-art" id="interludeArt" src="assets/chaotic_era.png" alt="乱纪元" />
+  <div class="interlude-veil"></div>
+  <div class="interlude-cap">
+    <span class="interlude-word">乱纪元</span>
+    <small>CHAOTIC ERA · 三日凌空 · 脱水</small>
+  </div>
+</div>
 
 <!-- ============ 第贰章 三体问题(可交互) ============ -->
 <section id="exhibit" class="chapter">
@@ -109,24 +128,28 @@
 
     <div class="works-grid">
       <article class="work reveal">
+        <div class="work-art"><img src="assets/work_ship.png" alt="" /></div>
         <div class="work-no">Ⅰ</div>
         <h3 class="work-name">【作品名占位】</h3>
         <p class="work-desc">【两行以内的作品介绍占位：它是什么、解决什么问题。】</p>
         <div class="work-meta">【类型占位】 · 【年份占位】</div>
       </article>
       <article class="work reveal">
+        <div class="work-art"><img src="assets/work_planet.png" alt="" /></div>
         <div class="work-no">Ⅱ</div>
         <h3 class="work-name">【作品名占位】</h3>
         <p class="work-desc">【两行以内的作品介绍占位：它是什么、解决什么问题。】</p>
         <div class="work-meta">【类型占位】 · 【年份占位】</div>
       </article>
       <article class="work reveal">
+        <div class="work-art"><img src="assets/work_monolith.png" alt="" /></div>
         <div class="work-no">Ⅲ</div>
         <h3 class="work-name">【作品名占位】</h3>
         <p class="work-desc">【两行以内的作品介绍占位：它是什么、解决什么问题。】</p>
         <div class="work-meta">【类型占位】 · 【年份占位】</div>
       </article>
       <article class="work reveal">
+        <div class="work-art"><img src="assets/work_orbits.png" alt="" /></div>
         <div class="work-no">Ⅳ</div>
         <h3 class="work-name">【作品名占位】</h3>
         <p class="work-desc">【两行以内的作品介绍占位：它是什么、解决什么问题。】</p>
@@ -146,6 +169,11 @@
     <h2 class="chapter-title">发出信号</h2>
     <p class="lead reveal">在黑暗森林里暴露坐标是危险的。<br>但我决定冒这个险。</p>
 
+    <div class="signal-grid">
+    <figure class="droplet-fig reveal">
+      <img src="assets/droplet.png" alt="水滴" />
+      <figcaption>水滴 · 强互作用力探测器<br><small>它正朝这里来，大约还有四百年</small></figcaption>
+    </figure>
     <div class="console reveal">
       <div class="console-bar">红岸发射系统 · RED COAST TRANSMITTER</div>
       <div class="console-body" id="consoleBody">
@@ -157,6 +185,7 @@
         <div class="cline"><span class="prompt">&gt;</span> 状态：持续发射中<span class="cursor">▌</span></div>
       </div>
     </div>
+    </div>
   </div>
 </section>
 
@@ -166,6 +195,9 @@
   <div class="foot-quote">"虫子从来没有被真正战胜过。"</div>
   <div class="foot-meta">© 2026 【你的名字】 · 向《三体》与刘慈欣致敬 · 本站不隶属于任何官方</div>
 </footer>
+
+<div class="vignette"></div>
+<div class="grain"></div>
 
 <script src="js/main.js"></script>
 </body>
