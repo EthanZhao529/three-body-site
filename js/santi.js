@@ -194,6 +194,9 @@ THREE.ColorManagement.enabled = false;
 const canvas = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+// 壁纸"超后处理"HDR:ACES 电影色调映射(对应预设 HDR强度4)
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.35;
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 renderer.setPixelRatio(DPR);
 renderer.setClearColor(0x000000, 1);
@@ -390,7 +393,8 @@ let compassA = 0;
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.38, 0.5, 0.55));
+// 宽泛光(对应预设 HDR散射2):半径大、强度柔
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.85, 0.5));
 
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
