@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { EffectComposer } from './vendor/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './vendor/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from './vendor/jsm/postprocessing/ShaderPass.js';
 
 /* ==================== 物理引擎(壁纸原样) ==================== */
 // 微缩系统:1单位长度=1e12m,1单位质量=1e30/5e6,1单位时间=1年
@@ -194,27 +195,27 @@ THREE.ColorManagement.enabled = false;
 const canvas = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-// 壁纸"超后处理"HDR:ACES 电影色调映射(对应预设 HDR强度4)
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.35;
+// 无色调映射:WE 是线性合成 + 泛光/后处理链(scene.general 解码)
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 renderer.setPixelRatio(DPR);
 renderer.setClearColor(0x000000, 1);
 const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 200);
+// scene.general 解码:fov=50,相机位 objects[140] z=6
+const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 200);
 camera.position.set(0, 0, 6);
 camera.lookAt(0, 0, 0);
 
 const texLoader = new THREE.TextureLoader();
-// 天空:壁纸三层按原始透明度合成(8K全分辨率,无增亮),缓慢自转消除"静止贴图"感
+// 天空盒00(scene.json 解码):st2 原图·亮度1·白色调制·绕Y -135°·静止
 const skyTex = texLoader.load('assets/wp/sky8k.jpg');
 skyTex.anisotropy = MAX_ANISO;
 const sky = new THREE.Mesh(
   new THREE.SphereGeometry(80, 64, 40),
   new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, depthWrite: false })
 );
+sky.rotation.y = -2.35619;
 scene.add(sky);
 
 // 世界组:天体/轨迹/罗盘都在其中,旋转世界=壁纸的 applyRotation
@@ -238,11 +239,11 @@ sunMap.colorSpace = THREE.NoColorSpace;
 const flareMap = texLoader.load('assets/wp/flare.png');
 const glowSoft = glowTexture();
 
-// 三星:壁纸材质染色(饱和度对齐桌面实机) + 尺寸比 30:23:16(h1z/h2z/h3z)
+// 三星:染色标定自桌面截图,尺寸比 30:23:16(h1z/h2z/h3z),绝对值按桌面视占比标定
 const SUNS = [
-  { core: 0xffffff, glow: 0xeaf1ff, r: 0.085 },
-  { core: 0xffa26a, glow: 0xffa26a, r: 0.068 },
-  { core: 0xff6a48, glow: 0xff714f, r: 0.048 }
+  { core: 0xffffff, glow: 0xeaf1ff, r: 0.100 },
+  { core: 0xffa26a, glow: 0xffa26a, r: 0.077 },
+  { core: 0xff6a48, glow: 0xff714f, r: 0.053 }
 ];
 const suns = [];
 for (let i = 0; i < 3; i++) {
@@ -253,17 +254,13 @@ for (let i = 0; i < 3; i++) {
     new THREE.MeshBasicMaterial({ map: sunMap, color: t.core })
   );
   core.rotation.x = 0.4 * i;
+  // sa3 光晕(壁纸自带贴图);大范围辉光交给 WE 同参的泛光
   const flare = new THREE.Sprite(new THREE.SpriteMaterial({
     map: flareMap, color: t.glow, transparent: true,
-    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.95, rotation: i * 0.7
+    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.9, rotation: i * 0.7
   }));
-  flare.scale.setScalar(t.r * 9);
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: glowSoft, color: t.glow, transparent: true,
-    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.18
-  }));
-  halo.scale.setScalar(t.r * 12);
-  g.add(core, flare, halo);
+  flare.scale.setScalar(t.r * 7);
+  g.add(core, flare);
   world.add(g);
   suns.push({ group: g, core, flare });
 }
@@ -310,50 +307,45 @@ for (let i = 0; i < 4; i++) {
   trailLines.push(geo);
 }
 
-// 星点:3D 粒子实时渲染(贴图只留尘带,星星交给粒子——任何分辨率都锐利干净)
-// 银河带内密、带外疏,模拟真实分布
-function starShell(n, sizeMin, sizeMax, opacity, bandBias) {
-  const pos = new Float32Array(n * 3);
+// 尘埃粒子(壁纸 star1/star2 解码:尺寸0.1/0.07·计数0.5/1·亮度2·alpha0.95·
+// 颜色(0.945,0.871,1)淡紫白·速度0.61·星星本身在 st2 贴图里,不另造)
+const dustGroups = [];
+function dustLayer(count, size) {
+  const n = count, pos = new Float32Array(n * 3), vel = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
-    const r = 40 + Math.random() * 30;
-    const th = Math.random() * Math.PI * 2;
-    // bandBias 越大越贴近银道面(y≈0)
-    let cy = Math.random() * 2 - 1;
-    cy = Math.sign(cy) * Math.pow(Math.abs(cy), 1 + bandBias);
-    const ph = Math.acos(cy);
-    pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
-    pos[i * 3 + 1] = r * Math.cos(ph);
-    pos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const p = new THREE.Points(g, new THREE.PointsMaterial({
-    color: 0xdde3ee, size: sizeMin + Math.random() * (sizeMax - sizeMin),
-    sizeAttenuation: true, transparent: true, opacity, depthWrite: false
-  }));
-  scene.add(p);
-  return p;
-}
-starShell(2200, 0.05, 0.07, 0.5, 1.4);   // 银河带细星
-starShell(900, 0.05, 0.08, 0.4, 0);      // 全天细星
-starShell(140, 0.11, 0.15, 0.75, 0);     // 少量亮星
-// 近景星尘(缓慢视差)
-(function () {
-  const n = 500, pos = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    const r = 6 + Math.random() * 26;
+    const r = 3 + Math.random() * 14;
     const th = Math.random() * Math.PI * 2, ph = Math.acos(Math.random() * 2 - 1);
     pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
     pos[i * 3 + 1] = r * Math.cos(ph);
     pos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
+    vel[i * 3] = (Math.random() - 0.5) * 0.061;
+    vel[i * 3 + 1] = (Math.random() - 0.5) * 0.061;
+    vel[i * 3 + 2] = (Math.random() - 0.5) * 0.061;
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  scene.add(new THREE.Points(g, new THREE.PointsMaterial({
-    color: 0xcfd4de, size: 0.025, sizeAttenuation: true,
-    transparent: true, opacity: 0.28, depthWrite: false
-  })));
-})();
+  const p = new THREE.Points(g, new THREE.PointsMaterial({
+    color: 0xf1defe, size, sizeAttenuation: true, map: glowSoft,
+    transparent: true, opacity: 0.5, depthWrite: false,
+    blending: THREE.AdditiveBlending
+  }));
+  p.userData.vel = vel;
+  scene.add(p);
+  dustGroups.push(p);
+}
+dustLayer(40, 0.05);    // dust1:size 0.1 × count 0.5
+dustLayer(80, 0.035);   // dust2:size 0.07 × count 1
+function advanceDust(dt) {
+  for (const p of dustGroups) {
+    const pos = p.geometry.attributes.position.array, vel = p.userData.vel;
+    for (let i = 0; i < pos.length; i += 3) {
+      pos[i] += vel[i] * dt; pos[i + 1] += vel[i + 1] * dt; pos[i + 2] += vel[i + 2] * dt;
+      const d2 = pos[i] * pos[i] + pos[i + 1] * pos[i + 1] + pos[i + 2] * pos[i + 2];
+      if (d2 > 400) { pos[i] *= -0.9; pos[i + 1] *= -0.9; pos[i + 2] *= -0.9; }
+    }
+    p.geometry.attributes.position.needsUpdate = true;
+  }
+}
 
 // 罗盘/导航盘:仅按住鼠标时浮现(壁纸 c_down 逻辑)
 const compass = new THREE.Group();
@@ -393,12 +385,88 @@ let compassA = 0;
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-// 宽泛光(对应预设 HDR散射2):半径大、强度柔
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.85, 0.5));
+// WE 内置 HDR 泛光(scene.general 解码:strength=4,scatter=2,threshold=0.46):
+// threshold 原值;scatter→大半径;强度按桌面截图光晕标定(WE与Unreal强度量纲不同)
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 1.15, 1.0, 0.46));
+
+// godrays 移植(effects/godrays 解码:方向π·强度0.3·阈值0.45,含原版的噪声调制预处理)
+const godraysPass = new ShaderPass({
+  uniforms: {
+    tDiffuse: { value: null },
+    uTime: { value: 0 },
+    uIntensity: { value: 0.3 },
+    uThreshold: { value: 0.45 }
+  },
+  vertexShader:
+    'varying vec2 vUv;\n' +
+    'void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader:
+    'varying vec2 vUv;\n' +
+    'uniform sampler2D tDiffuse;\n' +
+    'uniform float uTime;\n' +
+    'uniform float uIntensity;\n' +
+    'uniform float uThreshold;\n' +
+    'float n2(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }\n' +
+    'void main(){\n' +
+    '  vec4 base = texture2D(tDiffuse, vUv);\n' +
+    '  vec2 nd = vec2(0.0, -1.0);\n' +           // direction=π:光线向上蔓延
+    '  float reach = 0.14;\n' +                  // 原版经降采样+双高斯后有效光程很短
+    '  vec2 tc = vUv + nd * reach;\n' +
+    '  vec2 stp = nd * reach / 23.0;\n' +
+    '  vec3 rays = vec3(0.0);\n' +
+    '  for (int i = 0; i < 24; i++) {\n' +
+    '    vec3 s = max(texture2D(tDiffuse, tc).rgb - uThreshold, 0.0);\n' +
+    '    tc -= stp;\n' +
+    '    rays += s * (float(i) / 23.0);\n' +
+    '  }\n' +
+    // 原版 cast 前置噪声(amount0.4/scale3/speed0.15):光线碎化、缓慢流动
+    '  float ns = 0.6 + 0.4 * n2(floor(vUv * 3.0 * 24.0) + floor(uTime * 0.15 * 24.0));\n' +
+    '  base.rgb += rays * ns * uIntensity * 0.02;\n' +
+    '  gl_FragColor = base;\n' +
+    '}'
+});
+composer.addPass(godraysPass);
+
+// 胶片颗粒(filmgrain.frag 移植:双噪声相乘,strength=0.15) + CRT(opacity=0.03)
+const grainPass = new ShaderPass({
+  uniforms: {
+    tDiffuse: { value: null },
+    uTime: { value: 0 },
+    uRes: { value: new THREE.Vector2(1, 1) },
+    uGrain: { value: 0.15 },
+    uCrt: { value: 0.03 }
+  },
+  vertexShader:
+    'varying vec2 vUv;\n' +
+    'void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader:
+    'varying vec2 vUv;\n' +
+    'uniform sampler2D tDiffuse;\n' +
+    'uniform float uTime;\n' +
+    'uniform vec2 uRes;\n' +
+    'uniform float uGrain;\n' +
+    'uniform float uCrt;\n' +
+    'float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }\n' +
+    'void main(){\n' +
+    '  vec4 c = texture2D(tDiffuse, vUv);\n' +
+    '  vec2 cell = floor(vUv * uRes / 2.0);\n' +
+    '  float t = floor(uTime * 24.0);\n' +
+    '  float n1 = h(cell + t * 7.31);\n' +
+    '  float n2 = h(cell * 1.7 + 13.7 + t * 3.77);\n' +
+    '  float g = clamp(n1 * n2, 0.0, 1.0);\n' +
+    '  c.rgb += (g - 0.22) * uGrain * 0.55;\n' +
+    '  float scan = 0.5 + 0.5 * sin(vUv.y * uRes.y * 3.14159);\n' +
+    '  c.rgb *= 1.0 - uCrt * 0.5 * scan;\n' +
+    '  c.rgb += (h(cell + t * 1.3) - 0.5) * uCrt * 0.49 * 0.3;\n' +
+    '  gl_FragColor = c;\n' +
+    '}'
+});
+composer.addPass(grainPass);
 
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
   composer.setSize(innerWidth * DPR, innerHeight * DPR);
+  grainPass.uniforms.uRes.value.set(innerWidth * DPR, innerHeight * DPR);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
 }
@@ -455,8 +523,9 @@ const bootStatus = $('bootStatus');
 const spinnerEl = $('bootSpinner');
 let spinDeg = 0, spinTick = 0;
 let bootSeq = null;   // {hold, done} 渲染循环驱动(定时器会被后台节流)
-function runBootSequence(text, seconds, done) {
+function runBootSequence(text, seconds, done, translucent) {
   bootStatus.textContent = text;
+  boot.classList.toggle('seq', !!translucent);   // 重启=半透明罩(壁纸式),首启=全黑
   boot.classList.remove('gone');
   bootSeq = { hold: 0, secs: seconds, done };
 }
@@ -505,7 +574,7 @@ function frame() {
     if (numSeq >= 120 && numSeq - dt * 60 < 120) {
       civEscaped = true;
       resetSystem();
-      runBootSequence('系统重启中', 2.6, null);
+      runBootSequence('系统重启中', 2.6, null, true);
     }
     if (numSeq > 400) numSeq = 0;
   }
@@ -536,7 +605,11 @@ function frame() {
   }
   world.rotation.y = rotY * Math.PI / 180;
   world.rotation.x = (6 + rotX) * Math.PI / 180;
-  sky.rotation.y += dt * 0.0022;
+
+  // 尘埃漂移(壁纸 speed=0.61 量级) + 后处理时间
+  advanceDust(dt);
+  grainPass.uniforms.uTime.value = runT;
+  godraysPass.uniforms.uTime.value = runT;
 
   // 天体位置(质心系)
   for (let i = 0; i < 3; i++) {
