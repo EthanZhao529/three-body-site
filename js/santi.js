@@ -201,7 +201,7 @@ const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 200);
-camera.position.set(0, 0, 8);
+camera.position.set(0, 0, 6);
 camera.lookAt(0, 0, 0);
 
 const texLoader = new THREE.TextureLoader();
@@ -235,11 +235,11 @@ sunMap.colorSpace = THREE.NoColorSpace;
 const flareMap = texLoader.load('assets/wp/flare.png');
 const glowSoft = glowTexture();
 
-// 三星:壁纸材质染色 + 尺寸比 30:23:16(h1z/h2z/h3z)
+// 三星:壁纸材质染色(饱和度对齐桌面实机) + 尺寸比 30:23:16(h1z/h2z/h3z)
 const SUNS = [
-  { core: 0xffffff, glow: 0xf2f6ff, r: 0.092 },
-  { core: 0xffbb9b, glow: 0xffc9a8, r: 0.071 },
-  { core: 0xff8370, glow: 0xff8a5f, r: 0.049 }
+  { core: 0xffffff, glow: 0xeaf1ff, r: 0.085 },
+  { core: 0xffa26a, glow: 0xffa26a, r: 0.068 },
+  { core: 0xff6a48, glow: 0xff714f, r: 0.048 }
 ];
 const suns = [];
 for (let i = 0; i < 3; i++) {
@@ -257,9 +257,9 @@ for (let i = 0; i < 3; i++) {
   flare.scale.setScalar(t.r * 9);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({
     map: glowSoft, color: t.glow, transparent: true,
-    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.17
+    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.3
   }));
-  halo.scale.setScalar(t.r * 12);
+  halo.scale.setScalar(t.r * 15);
   g.add(core, flare, halo);
   world.add(g);
   suns.push({ group: g, core, flare });
@@ -284,8 +284,8 @@ function planetTint(tem, out) {
   return out;
 }
 
-// 轨迹 ×4(壁纸 trailLength=400,颜色=project.json 天体颜色)
-const TRAIL_N = 400;
+// 轨迹 ×4(加长至约23秒历史,颜色=project.json 天体颜色,桌面实机的长飘带感)
+const TRAIL_N = 1400;
 const TRAIL_COLS = [
   new THREE.Color(1, 1, 1),
   new THREE.Color(1, 0.839, 0.518),
@@ -363,7 +363,7 @@ let compassA = 0;
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.5, 0.5));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.7, 0.55, 0.45));
 
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
@@ -529,7 +529,7 @@ function frame() {
     for (let j = 0; j < n; j++) {
       const p = tr[j];
       pos[j * 3] = p[0]; pos[j * 3 + 1] = p[1]; pos[j * 3 + 2] = p[2];
-      const f = Math.pow(j / n, 1.15) * (i < 3 ? 1.0 : 0.7);
+      const f = Math.pow(j / n, 1.3) * (i < 3 ? 1.0 : 0.9);
       col[j * 3] = c.r * f; col[j * 3 + 1] = c.g * f; col[j * 3 + 2] = c.b * f;
     }
     geo.setDrawRange(0, n);
