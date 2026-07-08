@@ -257,9 +257,9 @@ for (let i = 0; i < 3; i++) {
   flare.scale.setScalar(t.r * 9);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({
     map: glowSoft, color: t.glow, transparent: true,
-    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.3
+    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.18
   }));
-  halo.scale.setScalar(t.r * 15);
+  halo.scale.setScalar(t.r * 12);
   g.add(core, flare, halo);
   world.add(g);
   suns.push({ group: g, core, flare });
@@ -321,7 +321,7 @@ for (let i = 0; i < 4; i++) {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   scene.add(new THREE.Points(g, new THREE.PointsMaterial({
     color: 0xcfd4de, size: 0.025, sizeAttenuation: true,
-    transparent: true, opacity: 0.45, depthWrite: false
+    transparent: true, opacity: 0.3, depthWrite: false
   })));
 })();
 
@@ -363,7 +363,7 @@ let compassA = 0;
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.7, 0.55, 0.45));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.38, 0.5, 0.55));
 
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
