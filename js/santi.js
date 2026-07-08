@@ -307,11 +307,38 @@ for (let i = 0; i < 4; i++) {
   trailLines.push(geo);
 }
 
-// 星尘(壁纸 dust=True)
-(function () {
-  const n = 700, pos = new Float32Array(n * 3);
+// 星点:3D 粒子实时渲染(贴图只留尘带,星星交给粒子——任何分辨率都锐利干净)
+// 银河带内密、带外疏,模拟真实分布
+function starShell(n, sizeMin, sizeMax, opacity, bandBias) {
+  const pos = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
-    const r = 6 + Math.random() * 30;
+    const r = 40 + Math.random() * 30;
+    const th = Math.random() * Math.PI * 2;
+    // bandBias 越大越贴近银道面(y≈0)
+    let cy = Math.random() * 2 - 1;
+    cy = Math.sign(cy) * Math.pow(Math.abs(cy), 1 + bandBias);
+    const ph = Math.acos(cy);
+    pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
+    pos[i * 3 + 1] = r * Math.cos(ph);
+    pos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const p = new THREE.Points(g, new THREE.PointsMaterial({
+    color: 0xdde3ee, size: sizeMin + Math.random() * (sizeMax - sizeMin),
+    sizeAttenuation: true, transparent: true, opacity, depthWrite: false
+  }));
+  scene.add(p);
+  return p;
+}
+starShell(2200, 0.05, 0.07, 0.5, 1.4);   // 银河带细星
+starShell(900, 0.05, 0.08, 0.4, 0);      // 全天细星
+starShell(140, 0.11, 0.15, 0.75, 0);     // 少量亮星
+// 近景星尘(缓慢视差)
+(function () {
+  const n = 500, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const r = 6 + Math.random() * 26;
     const th = Math.random() * Math.PI * 2, ph = Math.acos(Math.random() * 2 - 1);
     pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
     pos[i * 3 + 1] = r * Math.cos(ph);
@@ -321,7 +348,7 @@ for (let i = 0; i < 4; i++) {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   scene.add(new THREE.Points(g, new THREE.PointsMaterial({
     color: 0xcfd4de, size: 0.025, sizeAttenuation: true,
-    transparent: true, opacity: 0.3, depthWrite: false
+    transparent: true, opacity: 0.28, depthWrite: false
   })));
 })();
 
