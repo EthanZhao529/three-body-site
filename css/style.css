@@ -251,6 +251,72 @@ body.on-p1 .hud-br{ opacity:1; pointer-events:auto; }
 .reveal{ opacity:0; transform:translateY(46px); transition:opacity 1s ease, transform 1s ease; }
 .reveal.on{ opacity:1; transform:none; }
 
+/* ---------- 演算页 · 壁纸式 HUD(蓝钢色系,悬浮无卡片) ---------- */
+:root{ --steel:#8ea6c8; }
+.sim-log{
+  position:absolute; top:12vh; left:50%; transform:translateX(-50%);
+  width:min(760px,86vw); text-align:center; pointer-events:none;
+  font-family:var(--sans); font-size:13px; line-height:2.1;
+  letter-spacing:2px; color:var(--steel);
+  text-shadow:0 1px 10px rgba(0,0,0,.9);
+}
+.sim-log .sl-head{ font-size:14px; opacity:.95; }
+.sim-log .sl-sub{ font-size:12.5px; opacity:.8; margin-bottom:2px; }
+.sim-left{
+  position:absolute; left:6.5vw; top:50%; transform:translateY(-50%);
+  text-align:left; pointer-events:none; max-width:34vw;
+}
+.sim-left .ch-no{ margin-bottom:30px; }
+.sim-era{
+  font-family:var(--serif); font-weight:400;
+  font-size:clamp(30px,2.8vw,40px); letter-spacing:14px;
+  color:#b9c9e2; text-shadow:0 0 26px rgba(142,166,200,.35);
+  transition:color .8s ease;
+}
+.sim-era.harsh{ color:#9db0cd; }
+.sim-row{
+  margin-top:24px; font-family:var(--sans); font-size:15px;
+  letter-spacing:3px; color:rgba(142,166,200,.85);
+}
+.sim-row .num{ font-family:var(--mono); letter-spacing:1px; }
+.sim-hint{
+  margin-top:36px; font-family:var(--mono); font-size:10.5px;
+  letter-spacing:2px; line-height:2.2; color:var(--faint);
+}
+.sim-sliders{
+  position:absolute; right:6vw; top:50%; transform:translateY(-50%);
+  width:min(230px,20vw); pointer-events:none;
+}
+.srow{ display:flex; align-items:center; gap:16px; margin:40px 0; }
+.strack{ flex:1; height:1px; background:rgba(142,166,200,.22); position:relative; }
+.sfill{
+  position:absolute; left:0; top:-0.5px; height:2px; width:20%;
+  background:rgba(142,166,200,.75); transition:width .12s linear;
+}
+.sfill::after{
+  content:''; position:absolute; right:-3px; top:-2.5px;
+  width:7px; height:7px; background:#b9c9e2;
+  box-shadow:0 0 8px rgba(185,201,226,.8);
+}
+.slab{
+  font-family:var(--mono); font-size:15px; color:rgba(142,166,200,.85);
+  width:16px; text-align:center;
+}
+.sim-timeline{
+  position:absolute; bottom:6.5vh; left:50%; transform:translateX(-50%);
+  text-align:center; pointer-events:none;
+}
+#simWave{
+  display:block; width:min(440px,72vw); height:44px;
+  border-left:1px solid rgba(142,166,200,.55);
+  border-right:1px solid rgba(142,166,200,.55);
+  padding:0 3px;
+}
+.sim-years{
+  margin-top:12px; font-family:var(--mono); font-size:15px;
+  letter-spacing:4px; color:rgba(142,166,200,.8);
+}
+
 /* ---------- 电影氛围层 ---------- */
 .vignette{
   position:fixed; inset:0; z-index:60; pointer-events:none;
@@ -291,4 +357,15 @@ body.on-p1 .hud-br{ opacity:1; pointer-events:auto; }
   .quote.big{ letter-spacing:3px; }
   #dots{ right:10px; gap:11px; }
   .center.low{ margin-bottom:12vh; }
+  .sim-log{ top:14vh; font-size:11px; line-height:1.9; }
+  .sim-log .sl-head{ font-size:12px; }
+  .sim-log .sl-sub{ font-size:11px; }
+  .sim-left{ left:18px; max-width:60vw; }
+  .sim-left .ch-no{ margin-bottom:16px; }
+  .sim-era{ letter-spacing:8px; }
+  .sim-row{ margin-top:14px; font-size:13px; }
+  .sim-hint{ display:none; }
+  .sim-sliders{ display:none; }
+  .sim-timeline{ bottom:9vh; }
+  #simWave{ height:34px; }
 }

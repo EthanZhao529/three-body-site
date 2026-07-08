@@ -66,16 +66,25 @@
     </div>
   </section>
 
-  <!-- 第二页 · 三体演算 -->
+  <!-- 第二页 · 三体演算(壁纸式 HUD:日志/纪元/温度/滑条/波形) -->
   <section class="page" id="p1">
-    <div class="panel side-r">
-      <div class="ch-no">第壹章</div>
-      <h2 class="ch-title">三体问题</h2>
-      <p>三个天体，在彼此的引力中运动——<br>没有通用解析解。</p>
-      <p class="dim">眼前的三颗恒星正以四阶辛算法(Yoshida)实时演算，Aarseth 软化防引力奇点——
-        与「三体实时演算」壁纸同一套引擎。<b>按住拖拽可旋转视角</b>；
-        右下角的按钮，可以亲手毁掉这份秩序。</p>
-      <p class="quote">"物理规律在时间和空间上是均匀的，<br>但命运不是。"</p>
+    <div class="sim-log" id="simLog"></div>
+    <div class="sim-left">
+      <div class="ch-no">第壹章 · 三体问题</div>
+      <div class="sim-era" id="simEra">乱纪元</div>
+      <div class="sim-row">State : <span id="simState">脱水</span></div>
+      <div class="sim-row">表面温度 <span id="simTemp" class="num">--.--</span>°C</div>
+      <p class="sim-hint">与「三体实时演算」壁纸同一套引擎实时演算<br>
+        按住拖拽旋转视角 · 右下角按钮，亲手毁掉这份秩序</p>
+    </div>
+    <div class="sim-sliders">
+      <div class="srow"><div class="strack"><div class="sfill" id="sfG"></div></div><span class="slab">γ</span></div>
+      <div class="srow"><div class="strack"><div class="sfill" id="sfB"></div></div><span class="slab">β</span></div>
+      <div class="srow"><div class="strack"><div class="sfill" id="sfA"></div></div><span class="slab">α</span></div>
+    </div>
+    <div class="sim-timeline">
+      <canvas id="simWave" width="440" height="44"></canvas>
+      <div class="sim-years" id="simYears">0.00 Years</div>
     </div>
   </section>
 

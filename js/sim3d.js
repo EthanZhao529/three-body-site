@@ -74,64 +74,74 @@ try {
     x.fillStyle = g; x.fillRect(0, 0, s, s);
     return new THREE.CanvasTexture(cv);
   }
-  const sunMap = loadTex('assets/wp/sun_gray.jpg');   // 壁纸 0sun 日面(灰度,染色用)
+  const sunMap = loadTex('assets/wp/sun_gray.jpg');   // 壁纸 0aun 日面(三星共用,染色区分)
   sunMap.colorSpace = THREE.NoColorSpace;
-  const glowHard = glowTexture(true);
+  const flareMap = loadTex('assets/wp/flare.png');    // 壁纸 sa3 四芒星光晕
   const glowSoft = glowTexture(false);
 
-  /* ---------- 三颗恒星(色温与 2D 版一致) ---------- */
+  /* ---------- 三颗恒星(壁纸原版染色:白 1.5L / 奶橙 0.5L / 红橙 0.1L 红巨星) ---------- */
   const TINTS = [
-    { core: 0xffc46e, glow: 0xffb864, r: 0.082 },   // 琥珀
-    { core: 0xff8454, glow: 0xff7a4a, r: 0.068 },   // 红橙
-    { core: 0xffecbe, glow: 0xffe9b0, r: 0.096 }    // 白金
+    { core: 0xffffff, glow: 0xf2f6ff, r: 0.060 },   // 恒星1 白(最亮最小)
+    { core: 0xffbb9b, glow: 0xffc9a8, r: 0.075 },   // 恒星2 奶橙(1,.73,.61)
+    { core: 0xff8370, glow: 0xff8a5f, r: 0.096 }    // 恒星3 红橙(1,.51,.43)
   ];
   const CHAOS = new THREE.Color(0xe04034);
   const suns = [];
-  for (const t of TINTS) {
+  for (let si = 0; si < TINTS.length; si++) {
+    const t = TINTS[si];
     const g = new THREE.Group();
     const core = new THREE.Mesh(
       new THREE.SphereGeometry(t.r, 48, 32),
       new THREE.MeshBasicMaterial({ map: sunMap, color: t.core })
     );
+    core.rotation.x = 0.4 * si;                     // 各星日面错相
     const s1 = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glowHard, color: t.glow, transparent: true,
-      blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.9
+      map: flareMap, color: t.glow, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, opacity: 1,
+      rotation: si * 0.7
     }));
-    s1.scale.setScalar(t.r * 5.2);
+    s1.scale.setScalar(t.r * 9);
     const s2 = new THREE.Sprite(new THREE.SpriteMaterial({
       map: glowSoft, color: t.glow, transparent: true,
-      blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.22
+      blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.18
     }));
-    s2.scale.setScalar(t.r * 9);
+    s2.scale.setScalar(t.r * 11);
     g.add(core, s1, s2);
     scene.add(g);
     suns.push({ group: g, core, s1, s2, tint: t, baseCore: new THREE.Color(t.core), baseGlow: new THREE.Color(t.glow) });
   }
 
-  /* ---------- 行星:地球(壁纸 0dq 贴图 —— 被三日拉扯的就是我们) ---------- */
+  /* ---------- 行星:地球(壁纸 0dq 贴图;发光色随表面温度冻蓝↔灼红,壁纸同款) ---------- */
   const planet = new THREE.Group();
-  const earthBall = new THREE.Mesh(
-    new THREE.SphereGeometry(0.026, 32, 24),
-    new THREE.MeshBasicMaterial({ map: loadTex('assets/wp/earth.jpg') })
-  );
+  const earthMat = new THREE.MeshBasicMaterial({ map: loadTex('assets/wp/earth.jpg') });
+  const earthBall = new THREE.Mesh(new THREE.SphereGeometry(0.03, 32, 24), earthMat);
   planet.add(earthBall);
-  const pGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+  const pGlowMat = new THREE.SpriteMaterial({
     map: glowSoft, color: 0x96aabe, transparent: true,
     blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.5
-  }));
-  pGlow.scale.setScalar(0.16);
+  });
+  const pGlow = new THREE.Sprite(pGlowMat);
+  pGlow.scale.setScalar(0.17);
   planet.add(pGlow);
   scene.add(planet);
+  // 壁纸行星 emissive 温度映射:≤-100°C 向纯蓝,≥10°C 向纯红,中间白
+  function planetTint(tem, out) {
+    if (tem <= -100) { const k = Math.max(0, (tem + 210) / 110); out.setRGB(k, k, 1); }
+    else if (tem >= 10) { const k = Math.min(1, (tem - 10) / 990); out.setRGB(1, 1 - k, 1 - k); }
+    else out.setRGB(1, 1, 1);
+    return out;
+  }
 
-  /* ---------- 3D 轨迹(顶点渐隐,加色混合,泛光负责辉光) ---------- */
-  const TRAIL_N = 240;
+  /* ---------- 3D 轨迹 ×4(三星 + 行星蓝迹,顶点渐隐,加色混合) ---------- */
+  const TRAIL_N = 400;
+  const TRAIL_COLS = [null, null, null, new THREE.Color(0x7f9fd0)];  // 前三个用恒星色
   const trails = [];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_N * 3), 3));
     geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(TRAIL_N * 3), 3));
     const mat = new THREE.LineBasicMaterial({
-      vertexColors: true, transparent: true, opacity: 0.85,
+      vertexColors: true, transparent: true, opacity: 0.9,
       blending: THREE.AdditiveBlending, depthWrite: false
     });
     const line = new THREE.Line(geo, mat);
@@ -186,7 +196,7 @@ try {
     return new THREE.LatheGeometry(pts, 96);
   }
   const dropMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff, metalness: 1.0, roughness: 0.05, envMapIntensity: 3.2
+    color: 0xffffff, metalness: 1.0, roughness: 0.05, envMapIntensity: 1.9
   });
   const droplet = new THREE.Mesh(dropletGeometry(), dropMat);
   droplet.rotation.z = -Math.PI / 2;   // 尾指 +x,头朝 -x(航向)
@@ -261,7 +271,7 @@ try {
   const composer = new EffectComposer(renderer);
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
-  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.8, 0.4, 0.35);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.5, 0.5);
   composer.addPass(bloom);
 
   function resize() {
@@ -323,41 +333,60 @@ try {
     sky.rotation.y += dt * 0.0035;             // 银河缓旋(壁纸感)
     earthBall.rotation.y = now * 0.00025;
 
-    // 相机:方位角=拖拽 rotY,仰角=拖拽 rotX;机位拉远接翻页过渡
+    // 相机:方位角=拖拽 rotY,仰角=拖拽 rotX + 电影感缓慢俯仰漂移
     const d1 = view.d1 !== undefined ? view.d1 : view.d;
     const zin = d1 < 0 ? 1 + 2.4 * Math.pow(-d1, 2) * (3 - 2 * -d1) : 1;
     const R = 4.1 * zin;
     const azim = rot.y * Math.PI / 180;
-    const elev = Math.max(-1.35, Math.min(1.35, (12 - rot.x) * Math.PI / 180));
+    const elevDeg = 12 - rot.x + 2.2 * Math.sin(now / 23000);
+    const elev = Math.max(-1.35, Math.min(1.35, elevDeg * Math.PI / 180));
     const ch = R * Math.cos(elev);
     camera.position.set(ch * Math.sin(azim), R * Math.sin(elev), ch * Math.cos(azim));
     camera.lookAt(0, 0, 0);
 
     // 混沌红移(平滑过渡)
     chaosMix += ((st.chaosMode ? 1 : 0) - chaosMix) * 0.06;
+    const civ = window.__civ;
 
     // 恒星与行星位置(sim 平面 x,y → 世界 x,z;出平面 z → 世界 y)
     for (let i = 0; i < 3; i++) {
       const b = st.b[i], s = suns[i];
       s.group.position.set(b.x, b.z, b.y);
+      s.core.rotation.y = now * 0.00006 * (i + 1);   // 日面自转
       s.core.material.color.copy(s.baseCore).lerp(CHAOS, chaosMix);
       tmpColor.copy(s.baseGlow).lerp(CHAOS, chaosMix);
       s.s1.material.color.copy(tmpColor);
       s.s2.material.color.copy(tmpColor);
+      // 交会光涌:恒星逼近行星时光晕暴涨(壁纸近距交会的"三日凌空"质感)
+      const dNear = civ ? civ.d[i] : 1.5;
+      const boost = 1 + 1.9 / (1 + dNear * dNear * 4);
+      s.s1.scale.setScalar(s.tint.r * 9 * boost);
+      s.s1.material.opacity = 1;
+      s.s1.material.rotation += dt * 0.05 * (i - 1 || 1);
+      s.s2.scale.setScalar(s.tint.r * 11 * boost);
+      s.s2.material.opacity = 0.18 * boost;
     }
     planet.position.set(st.pl.x, st.pl.z, st.pl.y);
+    // 行星发光色随温度(冻蓝 ↔ 灼红,壁纸 0dq emissive 脚本移植)
+    if (civ) {
+      planetTint(civ.temp, tmpColor);
+      earthMat.color.copy(tmpColor);
+      pGlowMat.color.set(0x96aabe).lerp(tmpColor, 0.55);
+    }
 
-    // 轨迹缓冲更新
-    for (let i = 0; i < 3; i++) {
+    // 轨迹缓冲更新(三星 + 行星)
+    for (let i = 0; i < 4; i++) {
       const tr = st.trails[i], t3 = trails[i];
+      if (!tr) continue;
       const n = Math.min(tr.length, TRAIL_N);
       const pos = t3.geo.attributes.position.array;
       const col = t3.geo.attributes.color.array;
-      tmpColor.copy(suns[i].baseGlow).lerp(CHAOS, chaosMix);
+      if (i < 3) tmpColor.copy(suns[i].baseGlow).lerp(CHAOS, chaosMix);
+      else tmpColor.copy(TRAIL_COLS[3]);
       for (let j = 0; j < n; j++) {
         const p = tr[tr.length - n + j];
         pos[j * 3] = p[0]; pos[j * 3 + 1] = p[2]; pos[j * 3 + 2] = p[1];
-        const f = Math.pow(j / n, 1.4) * 0.9;
+        const f = Math.pow(j / n, 1.6) * (i < 3 ? 0.85 : 0.6);
         col[j * 3] = tmpColor.r * f; col[j * 3 + 1] = tmpColor.g * f; col[j * 3 + 2] = tmpColor.b * f;
       }
       t3.geo.setDrawRange(0, n);

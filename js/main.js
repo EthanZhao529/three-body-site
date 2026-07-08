@@ -141,11 +141,12 @@
   var BETA = 3 / (KSOFT - 1), ALPHA = 1 - BETA;
   var DD = 4.5;   // 逃逸重启距离(对质心,壁纸同款)
 
-  var sim = { b: [], pl: {}, trails: [[], [], []], chaosMode: false, civ: 191, lastEraChaos: null };
+  var sim = { b: [], pl: {}, trails: [[], [], [], []], chaosMode: false };
+  // 壁纸三星配色:恒星1 白(光度1.5) / 恒星2 奶橙(0.5) / 恒星3 红橙(0.1,红巨星最大)
   var SIM_COLS = [
-    { core: '#fff6e0', mid: '255,196,110', r: 11 },
-    { core: '#ffefe6', mid: '255,132,84', r: 9 },
-    { core: '#fffdf4', mid: '255,236,190', r: 13 }
+    { core: '#fff8ef', mid: '244,247,255', r: 9 },
+    { core: '#ffe3d2', mid: '255,187,155', r: 11 },
+    { core: '#ffc0ad', mid: '255,131,95', r: 14 }
   ];
   function simReset() {
     sim.b = [
@@ -154,7 +155,7 @@
       { x: 0, y: 0, z: 0, vx: -0.93240737, vy: -0.86473146, vz: 0 }
     ];
     sim.pl = { x: 1.7, y: 1.15, z: 0.1, vx: -0.34, vy: 0.3, vz: 0.02 };
-    sim.trails = [[], [], []];
+    sim.trails = [[], [], [], []];
     sim.chaosMode = false;
   }
   simReset();
@@ -201,23 +202,26 @@
     }
   }
   var trailTick = 0;
+  var simEscaped = false;   // 本帧发生"天体逃逸"重启(供文明系统记事)
   function simAdvance(steps) {
     for (var s = 0; s < steps; s++) {
       yoshidaStep();
       if (++trailTick % 3 === 0) {
         for (var i = 0; i < 3; i++) {
           sim.trails[i].push([sim.b[i].x, sim.b[i].y, sim.b[i].z]);
-          if (sim.trails[i].length > 240) sim.trails[i].shift();
+          if (sim.trails[i].length > 400) sim.trails[i].shift();
         }
+        sim.trails[3].push([sim.pl.x, sim.pl.y, sim.pl.z]);
+        if (sim.trails[3].length > 400) sim.trails[3].shift();
       }
     }
-    // 质心距离超过 DD → 恢复秩序(壁纸的"重启")
+    // 质心距离超过 DD → 恢复秩序(壁纸的"重启",记为天体逃逸)
     var cx = (sim.b[0].x + sim.b[1].x + sim.b[2].x) / 3;
     var cy2 = (sim.b[0].y + sim.b[1].y + sim.b[2].y) / 3;
     var cz = (sim.b[0].z + sim.b[1].z + sim.b[2].z) / 3;
     for (var q = 0; q < 3; q++) {
       var rx = sim.b[q].x - cx, ry = sim.b[q].y - cy2, rz = sim.b[q].z - cz;
-      if (Math.sqrt(rx * rx + ry * ry + rz * rz) > DD) { simReset(); break; }
+      if (Math.sqrt(rx * rx + ry * ry + rz * rz) > DD) { simEscaped = true; simReset(); break; }
     }
   }
 
@@ -262,7 +266,133 @@
     }
     sim.chaosMode = true;
   });
-  if (resetBtn) resetBtn.addEventListener('click', simReset);
+  if (resetBtn) resetBtn.addEventListener('click', function () {
+    simEscaped = true;   // 壁纸:手动复位=天体逃逸
+    simReset();
+  });
+
+  /* ============================================================
+     文明纪年系统 —— 壁纸 scene.pkg 内嵌引擎的原样移植
+     (阈值/公式/事件文案全部来自原脚本,一字未改)
+     ============================================================ */
+  var CIV = {
+    LK_D: 0.3,       // 凌空距离阈值
+    FX_D: 2.0,       // 飞星距离阈值
+    FX_T: -60,       // 飞星温度阈值
+    COLL_D: 0.2,     // 相撞距离阈值
+    ROCHE_D: 0.05,   // 大撕裂(洛希极限)
+    LOW_T: -100,     // 低温毁灭
+    HIGH_T: 400,     // 高温毁灭
+    STAB_LO: -50,    // 恒纪元低温阈值
+    STAB_HI: 70      // 恒纪元高温阈值
+  };
+  var civ = {
+    years: 0, count: 191, alive: false, startYear: 0, lastLife: 0, suit: 0,
+    log: [],                                   // {y,txt} 最新在前,最多5条
+    last: { roche: '', pc: '', lk: '', fx: '', sc: '' },
+    era: '乱纪元', state: '脱水', temp: 0,
+    d: [1, 1, 1], dp: [1, 1, 1]                // 星-行星距离 / 星-星距离
+  };
+  // 表面温度:斯特藩-玻尔兹曼平衡温度(壁纸公式,L=1.5/0.5/0.1,含冰雪反照率反馈)
+  function simTemp(ds) {
+    var toAU = 1e12 / 10 / 1.496e11;           // k_temp_dist=10
+    var L = [1.5, 0.5, 0.1], SIG = 5.67e-8, flux = 0;
+    for (var i = 0; i < 3; i++) {
+      var dAU = Math.max(ds[i], 0.01) * toAU;
+      flux += 1361 * L[i] / (dAU * dAU);
+    }
+    var alb = 0.3;
+    var base = Math.pow(flux * 0.7 / (4 * SIG), 0.25) - 273.15;
+    if (base < 0) alb = 0.3 + 0.3 * Math.min(1, -base / 20);
+    var t = Math.pow(flux * (1 - alb) / (4 * SIG), 0.25) - 273.15
+          + 10 * Math.sin(civ.years * 2.1);    // 壁纸的 ±10K 振荡
+    return Math.max(-270, Math.min(1500, t));
+  }
+  function civLog(year, parts) {
+    if (!parts.length) return;
+    civ.log.unshift({ y: year, txt: '第' + year + '年，' + parts.join('，') });
+    if (civ.log.length > 5) civ.log.pop();
+  }
+  function civAdvance(dt) {
+    civ.years += dt * 0.8;                     // ≈壁纸 kt=10 的年速
+    var year = Math.floor(civ.years);
+    var b = sim.b, p = sim.pl, i;
+    for (i = 0; i < 3; i++) {
+      var dx = b[i].x - p.x, dy = b[i].y - p.y, dz = b[i].z - p.z;
+      civ.d[i] = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+    var pairs = [[0, 1], [0, 2], [1, 2]];
+    for (i = 0; i < 3; i++) {
+      var q = pairs[i];
+      var ex = b[q[0]].x - b[q[1]].x, ey = b[q[0]].y - b[q[1]].y, ez = b[q[0]].z - b[q[1]].z;
+      civ.dp[i] = Math.sqrt(ex * ex + ey * ey + ez * ez);
+    }
+    civ.temp = simTemp(civ.d);
+
+    // 当前天象(壁纸判定顺序)
+    var cs = { roche: '', pc: '', lk: '', fx: '', sc: '' };
+    var roche = [], coll = [], sc = [];
+    for (i = 0; i < 3; i++) {
+      if (civ.d[i] < CIV.ROCHE_D) roche.push('恒星' + (i + 1));
+      else if (civ.d[i] < CIV.COLL_D) coll.push('恒星' + (i + 1));
+    }
+    if (roche.length) cs.roche = '大撕裂' + roche.join('、');
+    if (coll.length) cs.pc = '行星与' + coll.join('、') + '相撞';
+    var lkN = 0, fxN = 0;
+    for (i = 0; i < 3; i++) if (civ.d[i] < CIV.LK_D) lkN++;
+    cs.lk = lkN === 3 ? '三日凌空' : lkN === 2 ? '双日凌空' : lkN === 1 ? '巨日凌空' : '';
+    if (civ.temp < CIV.FX_T) for (i = 0; i < 3; i++) if (civ.d[i] > CIV.FX_D) fxN++;
+    cs.fx = fxN === 3 ? '三飞星' : fxN === 2 ? '双飞星' : fxN === 1 ? '飞星' : '';
+    var scp = [['恒星1与恒星2', 0], ['恒星1与恒星3', 1], ['恒星2与恒星3', 2]];
+    for (i = 0; i < 3; i++) if (civ.dp[scp[i][1]] < CIV.COLL_D) sc.push(scp[i][0]);
+    cs.sc = sc.join('，');
+
+    var ev = [];
+    var destroyed = '';
+    function destroy(cause) {
+      if (!civ.alive || destroyed) return;
+      civ.alive = false;
+      civ.lastLife = Math.max(0, year - civ.startYear);
+      destroyed = cause;
+      ev.push('第' + civ.count + '号文明毁灭于' + cause);
+      civ.count++;
+      civ.suit = 0;
+    }
+    // 毁灭优先级:逃逸 > 大撕裂 > 行星相撞 > 恒星相撞 > 温度(原因优先取凌空/飞星)
+    if (simEscaped) { destroy('天体逃逸'); simEscaped = false; }
+    if (cs.roche) destroy(cs.roche);
+    if (cs.pc) destroy(cs.pc);
+    if (cs.sc) destroy(cs.sc);
+    if (civ.temp < CIV.LOW_T || civ.temp > CIV.HIGH_T)
+      destroy(cs.lk || cs.fx || (civ.temp < CIV.LOW_T ? '低温' : '高温'));
+
+    // 文明启动:连续适宜期
+    var suitable = civ.temp >= CIV.LOW_T && civ.temp <= CIV.HIGH_T;
+    if (suitable) {
+      civ.suit += dt;
+      if (!civ.alive && civ.suit >= 2) {
+        civ.alive = true; civ.suit = 0; civ.startYear = year;
+        ev.push('第' + civ.count + '号文明启动');
+      }
+    } else civ.suit = 0;
+
+    // 天象变化记入日志(壁纸:仅当有文明存在或发生文明事件时)
+    var keys = ['roche', 'lk', 'fx', 'pc', 'sc'];
+    for (i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (cs[k] !== civ.last[k]) {
+        if (cs[k] && (civ.alive || ev.length) && ev.indexOf(cs[k]) < 0 &&
+            cs[k] !== destroyed) ev.unshift(cs[k]);
+        civ.last[k] = cs[k];
+      }
+    }
+    civLog(year, ev);
+
+    // 纪元大字:凌空 > 飞星 > 恒/乱纪元(壁纸判定顺序)
+    civ.era = cs.lk || cs.fx ||
+      (civ.temp >= CIV.STAB_LO && civ.temp <= CIV.STAB_HI ? '恒纪元' : '乱纪元');
+    civ.state = civ.era === '恒纪元' ? '浸泡' : '脱水';
+  }
 
   /* ---------- 星空粒子 ---------- */
   var stars = [];
@@ -649,12 +779,76 @@
   }
   var HUD_PAGES = [
     ['● 第二舰队 · 曲率驱动', false, '415 艘 · v = c · 目标 太阳系'],
-    null, // 实时演算页动态生成
+    ['● 实时演算 · 文明纪年', false, 'Yoshida 四阶辛积分 · Aarseth 软化 · 拖拽旋转视角'],
     ['● 乱纪元 · 两种死法', true, '移动鼠标 · 拨动灾难的界限'],
     ['● 黑暗森林 · 保持静默', true, '1420MHz 广播中 · 不要回答'],
     ['● 警告 · 强互作用力探测器', true, 'v = 0.119c · 表面绝对光滑'],
     ['● 降维打击 · 二维化进行中', true, '太阳系正在跌入二维平面']
   ];
+
+  /* ---------- 演算页壁纸式 HUD(日志/纪元/温度/滑条/波形/年份) ---------- */
+  var elLog = document.getElementById('simLog');
+  var elEra = document.getElementById('simEra');
+  var elState = document.getElementById('simState');
+  var elTemp = document.getElementById('simTemp');
+  var elYears = document.getElementById('simYears');
+  var sfEls = [document.getElementById('sfA'), document.getElementById('sfB'), document.getElementById('sfG')];
+  var waveCv = document.getElementById('simWave');
+  var waveCtx = waveCv ? waveCv.getContext('2d') : null;
+  var tempHist = [], lastWaveT = 0, lastLogHtml = '', lastEraTxt = '';
+  function slideFill(d) {
+    var v = d > 10 ? 7.5 : d > 5 ? 5 + 0.5 * (d - 5) : d;   // 壁纸的远端压缩映射
+    return Math.min(78, v * 10);                             // 满刻度 = 10
+  }
+  function updateSimHud(now) {
+    if (!elEra) return;
+    if (civ.era !== lastEraTxt) {
+      elEra.textContent = civ.era;
+      elEra.classList.toggle('harsh', civ.era !== '恒纪元');
+      lastEraTxt = civ.era;
+    }
+    if (elState) elState.textContent = civ.state;
+    if (elTemp) elTemp.textContent = civ.temp.toFixed(2);
+    if (elYears) elYears.textContent = civ.years.toFixed(2) + ' Years';
+    for (var i = 0; i < 3; i++)
+      if (sfEls[i]) sfEls[i].style.width = slideFill(civ.d[i]).toFixed(1) + '%';
+    // 文明日志栈(第一行最亮,越旧越淡 —— 壁纸排版)
+    var html = '<div class="sl-head">' +
+      (civ.alive ? '第' + civ.count + '号文明正在运行' : '文明无法生存') + '</div>' +
+      '<div class="sl-sub">' +
+      (civ.alive ? '文明已存活: ' + Math.max(0, Math.floor(civ.years) - civ.startYear) + '年'
+                 : '上个文明寿命: ' + civ.lastLife + '年') + '</div>';
+    for (var j = 0; j < civ.log.length; j++)
+      html += '<div style="opacity:' + (0.60 - j * 0.11).toFixed(2) + '">' + civ.log[j].txt + '</div>';
+    if (html !== lastLogHtml) { elLog.innerHTML = html; lastLogHtml = html; }
+    // 温度史波形(底部时间轴)
+    if (waveCtx) {
+      if (now - lastWaveT > 180) {
+        lastWaveT = now;
+        tempHist.push(civ.temp);
+        if (tempHist.length > 200) tempHist.shift();
+      }
+      var wv = waveCv.width, wh = waveCv.height;
+      waveCtx.clearRect(0, 0, wv, wh);
+      if (tempHist.length > 1) {
+        var mn = Infinity, mx = -Infinity;
+        for (var m = 0; m < tempHist.length; m++) {
+          if (tempHist[m] < mn) mn = tempHist[m];
+          if (tempHist[m] > mx) mx = tempHist[m];
+        }
+        if (mx - mn < 40) { var cmid = (mx + mn) / 2; mn = cmid - 20; mx = cmid + 20; }
+        waveCtx.strokeStyle = 'rgba(142,166,200,0.75)';
+        waveCtx.lineWidth = 1;
+        waveCtx.beginPath();
+        for (var w = 0; w < tempHist.length; w++) {
+          var wx = w / 199 * wv;
+          var wy = wh - 2 - (tempHist[w] - mn) / (mx - mn) * (wh - 4);
+          if (w === 0) waveCtx.moveTo(wx, wy); else waveCtx.lineTo(wx, wy);
+        }
+        waveCtx.stroke();
+      }
+    }
+  }
 
   /* ---------- 主循环 ---------- */
   var lastNow = performance.now();
@@ -667,11 +861,12 @@
     if (Math.abs(page - pf) < 0.0006 && Math.abs(pv) < 0.002) { pf = page; pv = 0; }
     if (pagesEl) pagesEl.style.transform = 'translateY(' + (-pf * 100) + 'vh)';
 
-    // 实时演算持续推进(约 240 步/秒) + 视角惯性
+    // 实时演算持续推进(约 240 步/秒) + 文明纪年 + 视角惯性
     simAdvance(Math.max(1, Math.round(dtMs * 0.24)));
+    civAdvance(dt);
     rotAdvance();
     // 暴露给 Three.js 渲染层(演算页 + 水滴页)
-    window.__sim = sim; window.__rot = rot;
+    window.__sim = sim; window.__rot = rot; window.__civ = civ;
     window.__view = { a1: clamp01(1 - Math.abs(pf - 1)), d1: pf - 1,
                       a4: clamp01(1 - Math.abs(pf - 4)), d4: pf - 4 };
 
@@ -693,25 +888,8 @@
 
     // HUD
     var cur = Math.round(pf);
-    if (cur === 1) {
-      var ds = [];
-      for (var q = 0; q < 3; q++) {
-        var dx = sim.b[q].x - sim.pl.x, dy = sim.b[q].y - sim.pl.y, dz = sim.b[q].z - sim.pl.z;
-        ds.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
-      }
-      var sorted = ds.slice().sort(function (m, n) { return m - n; });
-      var stable = sorted[0] < sorted[1] * 0.45;
-      // 文明计数:恒纪元→乱纪元的瞬间,一轮文明毁灭(致敬壁纸的文明排行榜)
-      var chaosNow = !stable;
-      if (sim.lastEraChaos === false && chaosNow) sim.civ++;
-      sim.lastEraChaos = chaosNow;
-      hud(sim.chaosMode ? '● 已被扰动 · 不可预测' : (stable ? '● 恒纪元' : '● 乱纪元'),
-        sim.chaosMode || !stable,
-        'Yoshida 四阶辛积分 · Aarseth 软化 · 文明 #' + sim.civ + ' · 拖拽旋转视角',
-        'd₁ ' + ds[0].toFixed(2) + ' · d₂ ' + ds[1].toFixed(2) + ' · d₃ ' + ds[2].toFixed(2) + ' AU');
-    } else if (HUD_PAGES[cur]) {
-      hud(HUD_PAGES[cur][0], HUD_PAGES[cur][1], HUD_PAGES[cur][2], '');
-    }
+    if (cur === 1) updateSimHud(now);
+    if (HUD_PAGES[cur]) hud(HUD_PAGES[cur][0], HUD_PAGES[cur][1], HUD_PAGES[cur][2], '');
     requestAnimationFrame(frame);
   }
 
