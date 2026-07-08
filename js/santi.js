@@ -218,9 +218,11 @@ const sky = new THREE.Mesh(
 sky.rotation.y = -2.35619;
 scene.add(sky);
 
-// 世界组:天体/轨迹/罗盘都在其中,旋转世界=壁纸的 applyRotation
+// 世界组:天体/轨迹/罗盘都在其中,旋转世界=壁纸的 applyRotation;
+// 引擎解码:渲染 z 偏移 gjz=-9(先绕质心旋转再平移),相机 z=6 → 实际观距 15
 const world = new THREE.Group();
 world.rotation.order = 'YXZ';
+world.position.z = -9;
 scene.add(world);
 
 function glowTexture() {
@@ -239,12 +241,18 @@ sunMap.colorSpace = THREE.NoColorSpace;
 const flareMap = texLoader.load('assets/wp/flare.png');
 const glowSoft = glowTexture();
 
-// 三星:染色标定自桌面截图,尺寸比 30:23:16(h1z/h2z/h3z),绝对值按桌面视占比标定
+// 三星(材质 json 推导,零手调):
+// 染色 = color×brightness + emissive×emissivebrightness 归一
+//   星1 (1,1,1)·1+(1,1,1)·1 → #FFFFFF
+//   星2 (1,.6,.6)·0.85+(1,.733,.608)·2 → #FFB19B
+//   星3 (1,.494,.431)·1+(1,.514,.373)·2 → #FF8164
+// 尺寸:h1z/h2z/h3z=0.03/0.023/0.016,世界半径 0.25/0.192/0.133(桌面视占比核验)
 const SUNS = [
-  { core: 0xffffff, glow: 0xeaf1ff, r: 0.100 },
-  { core: 0xffa26a, glow: 0xffa26a, r: 0.077 },
-  { core: 0xff6a48, glow: 0xff714f, r: 0.053 }
+  { core: 0xffffff, r: 0.250, flareScale: 2.00 },   // sa3 世界尺寸=512×0.13×h1z
+  { core: 0xffb19b, r: 0.192, flareScale: 1.53 },
+  { core: 0xff8164, r: 0.133, flareScale: 1.07 }
 ];
+const SA3_TINT = 0xffcbb1;   // 三星同色 _16/_24/_33 = (1,0.796,0.694)
 const suns = [];
 for (let i = 0; i < 3; i++) {
   const t = SUNS[i];
@@ -253,29 +261,22 @@ for (let i = 0; i < 3; i++) {
     new THREE.SphereGeometry(t.r, 48, 32),
     new THREE.MeshBasicMaterial({ map: sunMap, color: t.core })
   );
-  core.rotation.x = 0.4 * i;
-  // sa3 光晕(壁纸自带贴图);大范围辉光交给 WE 同参的泛光
+  // sa3 光晕(壁纸原参:alpha 0.59,不旋转,跟随本体)
   const flare = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: flareMap, color: t.glow, transparent: true,
-    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.9, rotation: i * 0.7
+    map: flareMap, color: SA3_TINT, transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.59
   }));
-  flare.scale.setScalar(t.r * 7);
+  flare.scale.setScalar(t.flareScale);
   g.add(core, flare);
   world.add(g);
   suns.push({ group: g, core, flare });
 }
-// 行星(0dq 贴图,发光色随温度:冻蓝↔灼红)
+// 行星(球体04/0dq 解码:x1z=0.01 → 世界半径 0.25×(0.01/0.03)≈0.083;
+// 发光色随温度冻蓝↔灼红=材质 emissive 脚本原样;无光晕精灵,辉光交给泛光)
 const earthMat = new THREE.MeshBasicMaterial({ map: texLoader.load('assets/wp/earth.jpg') });
 const planetG = new THREE.Group();
-const planetBall = new THREE.Mesh(new THREE.SphereGeometry(0.031, 32, 24), earthMat);
+const planetBall = new THREE.Mesh(new THREE.SphereGeometry(0.083, 32, 24), earthMat);
 planetG.add(planetBall);
-const pGlowMat = new THREE.SpriteMaterial({
-  map: glowSoft, color: 0x96aabe, transparent: true,
-  blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.45
-});
-const pGlow = new THREE.Sprite(pGlowMat);
-pGlow.scale.setScalar(0.15);
-planetG.add(pGlow);
 world.add(planetG);
 function planetTint(tem, out) {
   if (tem <= -100) { const k = Math.max(0, (tem + 210) / 110); out.setRGB(k, k, 1); }
@@ -284,8 +285,8 @@ function planetTint(tem, out) {
   return out;
 }
 
-// 轨迹 ×4(加长至约23秒历史,颜色=project.json 天体颜色,桌面实机的长飘带感)
-const TRAIL_N = 1400;
+// 轨迹 ×4(壁纸原参:trailLength=400·每帧一点·线性渐隐,颜色=project.json 天体颜色)
+const TRAIL_N = 400;
 const TRAIL_COLS = [
   new THREE.Color(1, 1, 1),
   new THREE.Color(1, 0.839, 0.518),
@@ -360,16 +361,16 @@ const compass = new THREE.Group();
     const m = new THREE.LineBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false });
     return new THREE.Line(geo, m);
   };
-  compass.add(mkRing(2.0, 128, 0x4a6a94, 0.6));           // 赤道环
+  compass.add(mkRing(5.0, 128, 0x4a6a94, 0.6));           // 赤道环(随观距15等比放大)
   const yAxis = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, -2.3, 0), new THREE.Vector3(0, 2.3, 0)
+    new THREE.Vector3(0, -5.75, 0), new THREE.Vector3(0, 5.75, 0)
   ]);
   compass.add(new THREE.Line(yAxis, new THREE.LineBasicMaterial({
     color: 0x28496f, transparent: true, opacity: 0.3, depthWrite: false
   })));
   // 刻度
   for (let i = 0; i < 24; i++) {
-    const a = i / 24 * Math.PI * 2, r1 = 2.0, r2 = i % 6 === 0 ? 2.12 : 2.06;
+    const a = i / 24 * Math.PI * 2, r1 = 5.0, r2 = i % 6 === 0 ? 5.3 : 5.15;
     const t = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(Math.cos(a) * r1, 0, Math.sin(a) * r1),
       new THREE.Vector3(Math.cos(a) * r2, 0, Math.sin(a) * r2)
@@ -644,17 +645,19 @@ function frame() {
   grainPass.uniforms.uTime.value = runT;
   godraysPass.uniforms.uTime.value = runT;
 
-  // 天体位置(质心系)
+  // 天体位置(质心系) + 随机游走自旋(壁纸 angles 脚本:k=1.5×1000×ft/30 度)
+  const kTumble = Math.min(1.5 * 1000 * dt / 30, 3) * Math.PI / 180;
   for (let i = 0; i < 3; i++) {
     suns[i].group.position.set(B[i].x - com.x, B[i].y - com.y, B[i].z - com.z);
-    suns[i].core.rotation.y = runT * 0.02 * (i + 1);
+    suns[i].core.rotation.y += kTumble * Math.random();
+    suns[i].core.rotation.x += kTumble * Math.random();
   }
   planetG.position.set(B[3].x - com.x, B[3].y - com.y, B[3].z - com.z);
-  planetBall.rotation.y = runT * 0.3;
+  planetBall.rotation.y += kTumble * Math.random();
+  planetBall.rotation.x -= kTumble * Math.random();
   const tmp = new THREE.Color();
   planetTint(civ.temp, tmp);
   earthMat.color.copy(tmp);
-  pGlowMat.color.set(0x96aabe).lerp(tmp, 0.55);
 
   // 轨迹缓冲
   for (let i = 0; i < 4; i++) {
@@ -666,7 +669,7 @@ function frame() {
     for (let j = 0; j < n; j++) {
       const p = tr[j];
       pos[j * 3] = p[0]; pos[j * 3 + 1] = p[1]; pos[j * 3 + 2] = p[2];
-      const f = Math.pow(j / n, 1.3) * (i < 3 ? 1.0 : 0.9);
+      const f = n > 1 ? j / (n - 1) : 1;   // 壁纸 updateTrailAppearance:线性 alpha 渐变
       col[j * 3] = c.r * f; col[j * 3 + 1] = c.g * f; col[j * 3 + 2] = c.b * f;
     }
     geo.setDrawRange(0, n);
