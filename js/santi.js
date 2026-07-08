@@ -20,6 +20,8 @@ const RAS = 0.1, KSOFT = 2.8, KRAS = KSOFT * RAS;
 const A_BETA = 3 / (KSOFT - 1), A_ALPHA = 1 - A_BETA;
 const DD = 6;                    // 逃逸阈值(对质心)
 const XC = 2, VC = 0.1;          // 随机初始:位置±1,速度±0.05
+// 引力牢笼(壁纸软牢笼,用户 project.json 参数:Mc=1.5e7,k1=0,re=0.1,k2=0.5,rc=0.2,n=2)
+const CAGE_GM = G * 1.5e7, CAGE_K2 = 0.5, CAGE_RC = 0.2, CAGE_N = 2;
 
 // Yoshida 1990 四阶辛积分系数
 const Yw1 = 1.35120719196, Yw0 = -1.70241438392;
@@ -68,6 +70,16 @@ function drift(c) {
 function kick(d) {
   const acc = [];
   for (let i = 0; i < 4; i++) acc.push(accOn(i));
+  // 引力牢笼:r>rc 时向质心回拉 k2·G·Mc·(r-rc)^n,防天体逃逸(壁纸软牢笼)
+  const com = computeCOM();
+  for (let i = 0; i < 4; i++) {
+    const dx = B[i].x - com.x, dy = B[i].y - com.y, dz = B[i].z - com.z;
+    const r = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (r > CAGE_RC) {
+      const mag = CAGE_K2 * CAGE_GM * Math.pow(r - CAGE_RC, CAGE_N) / Math.max(r, 1e-6);
+      acc[i][0] -= mag * dx; acc[i][1] -= mag * dy; acc[i][2] -= mag * dz;
+    }
+  }
   for (let i = 0; i < 4; i++) {
     B[i].vx += d * TS * acc[i][0]; B[i].vy += d * TS * acc[i][1]; B[i].vz += d * TS * acc[i][2];
   }
@@ -364,8 +376,8 @@ resize();
 
 /* ==================== 视角(壁纸模式0:仅按住拖拽,带惯性) ==================== */
 let cDown = false, lastPX = 0, lastPY = 0;
-let rotY = 0, rotX = 0, rotVelY = 0;
-addEventListener('pointerdown', e => { cDown = true; lastPX = e.clientX; lastPY = e.clientY; });
+let rotY = 0, rotX = 0, rotVelY = 0, recenter = false;
+addEventListener('pointerdown', e => { cDown = true; recenter = false; lastPX = e.clientX; lastPY = e.clientY; });
 addEventListener('pointerup', () => { cDown = false; });
 addEventListener('pointermove', e => {
   if (!cDown) return;
@@ -382,6 +394,11 @@ const elYears = $('hYears');
 const hud = $('hud');
 let hudOn = false;
 function setHud(on) { hudOn = on; hud.classList.toggle('on', on); }
+
+$('recenterBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  recenter = true;
+});
 
 let lastLogHtml = '', lastEra = '';
 function updateHud() {
@@ -471,10 +488,21 @@ function frame() {
   // 文明纪年
   civAdvance(dt, runT);
 
-  // 视角:仅拖拽改变(带惯性,壁纸模式0);世界旋转,天空缓慢自转
-  rotY += rotVelY;
-  if (!cDown) rotVelY *= 0.985;         // 壁纸阻尼
-  if (Math.abs(rotVelY) < 0.001) rotVelY = 0;
+  // 视角:仅拖拽改变(弱惯性);回正=平滑归位;世界旋转,天空缓慢自转
+  if (recenter) {
+    const tgtY = Math.round(rotY / 360) * 360;
+    const k = Math.min(1, dt * 5);
+    rotY += (tgtY - rotY) * k;
+    rotX += (0 - rotX) * k;
+    rotVelY = 0;
+    if (Math.abs(rotY - tgtY) < 0.1 && Math.abs(rotX) < 0.1) {
+      rotY = tgtY; rotX = 0; recenter = false;
+    }
+  } else {
+    rotY += rotVelY;
+    if (!cDown) rotVelY *= 0.88;        // 弱惯性:松手快速停稳
+    if (Math.abs(rotVelY) < 0.001) rotVelY = 0;
+  }
   world.rotation.y = rotY * Math.PI / 180;
   world.rotation.x = (6 + rotX) * Math.PI / 180;
   sky.rotation.y += dt * 0.0022;

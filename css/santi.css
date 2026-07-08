@@ -51,6 +51,20 @@ body{
 #hTemp{ margin-top:2px; opacity:.85; }
 #hTemp .v{ font-family:'Rajdhani'; letter-spacing:1px; }
 
+/* 回正按钮(右下角) */
+#recenterBtn{
+  position:absolute; right:3.2%; bottom:5.5%;
+  pointer-events:auto; cursor:pointer;
+  font-family:'FZTieXHJW','Rajdhani'; font-size:13.5px; letter-spacing:8px;
+  color:rgba(142,166,200,.7); background:transparent;
+  border:1px solid rgba(142,166,200,.32);
+  padding:9px 20px 9px 28px;
+  transition:color .3s ease, border-color .3s ease;
+}
+#recenterBtn:hover{
+  color:rgba(185,207,236,.95); border-color:rgba(142,166,200,.6);
+}
+
 /* 年份 */
 #hYears{
   position:absolute; left:50%; bottom:4.6%; transform:translateX(-50%);
