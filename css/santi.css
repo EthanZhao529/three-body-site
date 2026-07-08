@@ -1,0 +1,189 @@
+/* ============================================================
+   三体实时演算 · 壁纸 1:1 浏览器复刻
+   字体/配色/布局全部对照壁纸源文件与用户录屏
+   ============================================================ */
+@font-face{
+  font-family:'FZTieXHJW';
+  src:url('../assets/wp/fonts/FZTieXHJW_Cu.TTF') format('truetype');
+  font-display:swap;
+}
+@font-face{
+  font-family:'Rajdhani';
+  src:url('../assets/wp/fonts/Rajdhani-Medium.otf') format('opentype');
+  font-display:swap;
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+html,body{ width:100%; height:100%; overflow:hidden; background:#000; }
+body{
+  font-family:'Rajdhani','FZTieXHJW',system-ui,sans-serif;
+  color:#97c3ff;
+  -webkit-user-select:none; user-select:none;
+  cursor:default;
+}
+#gl{ position:fixed; inset:0; z-index:0; }
+
+/* ---------- HUD 总层 ---------- */
+#hud{
+  position:fixed; inset:0; z-index:10; pointer-events:none;
+  opacity:0; transition:opacity 1.2s ease;
+}
+#hud.on{ opacity:1; }
+
+/* 时钟组(壁纸 cly=0.14:中心上方) */
+.clock-block{
+  position:absolute; left:50%; top:13%; transform:translateX(-50%);
+  text-align:center; pointer-events:auto; cursor:pointer;
+}
+#hClock{
+  font-family:'Rajdhani'; font-size:52px; font-weight:500;
+  letter-spacing:4px; color:rgba(156,156,156,.92); line-height:1.05;
+}
+#hDay{
+  font-family:'Rajdhani'; font-size:19px; letter-spacing:2px;
+  color:rgba(156,156,156,.8); margin-top:2px;
+}
+#hDate{
+  font-family:'Rajdhani'; font-size:14.5px; letter-spacing:1.5px;
+  color:#97c3ff; opacity:.85; margin-top:3px;
+}
+
+/* 文明日志(时钟下方,渐隐栈) */
+.log-block{
+  position:absolute; left:50%; top:24.5%; transform:translateX(-50%);
+  width:min(760px,90vw); text-align:center;
+  font-family:'FZTieXHJW','Rajdhani'; font-size:13.5px;
+  letter-spacing:1.5px; line-height:2.05; color:#8ea6c8;
+}
+.log-block .lg-head{ font-size:14px; opacity:.55; }
+.log-block .lg-sub{ opacity:.45; }
+
+/* 左菜单:纪元 / State / 表面温度(壁纸 mlx=-0.48,mly=-0.22) */
+.menu-left{
+  position:absolute; left:7%; top:66%; transform:translateY(-50%);
+  text-align:center; font-family:'FZTieXHJW','Rajdhani';
+}
+#hEra{
+  font-size:30px; letter-spacing:10px; color:#8ea6c8; opacity:.95;
+}
+#hState{
+  margin-top:26px; font-size:15.5px; letter-spacing:2px;
+  color:#7c95bd; opacity:.5;
+}
+#hTemp{
+  margin-top:22px; font-size:16px; letter-spacing:2px;
+  color:#8ea6c8; opacity:.62;
+}
+#hTemp .v{ font-family:'Rajdhani'; letter-spacing:1px; }
+
+/* 右菜单:γβα 距离滑条(壁纸 mrx=0.48,mry=-0.22) */
+.menu-right{
+  position:absolute; right:7%; top:66%; transform:translateY(-50%);
+  width:min(215px,18vw);
+}
+.trow{ display:flex; align-items:center; gap:15px; margin:38px 0; }
+.ttrack{ flex:1; height:1px; background:rgba(142,166,200,.2); position:relative; }
+.tfill{
+  position:absolute; left:0; top:-0.5px; height:1.5px; width:20%;
+  background:rgba(151,195,255,.85);
+}
+.tfill::after{
+  content:''; position:absolute; right:-3px; top:-2.5px;
+  width:6px; height:6px; background:#b9cfec;
+}
+.trow .lb{
+  font-family:'Rajdhani'; font-size:16px; color:rgba(142,166,200,.85);
+  width:14px; text-align:center;
+}
+
+/* 音频波形(底部括号框) */
+.audio-block{
+  position:absolute; left:50%; bottom:9.5%; transform:translateX(-50%);
+  width:min(420px,66vw); height:64px; pointer-events:auto; cursor:pointer;
+}
+.audio-block .bracket{
+  position:absolute; inset:0; width:100%; height:100%; object-fit:fill;
+  opacity:.6;
+}
+#wave{ position:absolute; left:3%; top:12%; width:94%; height:76%; }
+
+/* 年份 */
+#hYears{
+  position:absolute; left:50%; bottom:4.6%; transform:translateX(-50%);
+  font-family:'Rajdhani'; font-size:17px; letter-spacing:4px;
+  color:rgba(142,166,200,.55);
+}
+
+/* ---------- 开机/登录序列(壁纸 加载信息 组) ---------- */
+#boot{
+  position:fixed; inset:0; z-index:20; background:#000;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  transition:opacity 1.4s ease, background 1.4s ease;
+}
+#boot.seq{ background:rgba(0,0,0,.55); }
+#boot.gone{ opacity:0; pointer-events:none; }
+.boot-power{
+  width:74px; height:74px; cursor:pointer; opacity:.85;
+  animation:pw 2.4s ease-in-out infinite;
+}
+@keyframes pw{ 0%,100%{opacity:.5} 50%{opacity:1} }
+.boot-hint{
+  margin-top:26px; font-family:'FZTieXHJW','Rajdhani'; font-size:13px;
+  letter-spacing:6px; color:rgba(142,166,200,.6);
+}
+.boot-stage{ display:none; flex-direction:column; align-items:center; }
+#boot.seq .boot-power, #boot.seq .boot-hint{ display:none; }
+#boot.seq .boot-stage{ display:flex; }
+.boot-spin-wrap{ position:relative; width:96px; height:96px; flex:none; }
+.boot-ring{
+  position:absolute; left:-14px; top:-14px; width:124px; height:124px;
+  display:block; opacity:.5;
+}
+.boot-spinner{
+  position:absolute; left:0; top:0; width:96px; height:96px; display:block;
+}
+.boot-login{ margin-top:38px; }
+.boot-row{
+  display:flex; align-items:center; gap:14px; margin:13px 0;
+  font-family:'Rajdhani';
+}
+.boot-row img{ width:26px; height:26px; opacity:.85; }
+.boot-row .bl{
+  font-size:15px; letter-spacing:2px; color:rgba(156,170,190,.75); width:86px;
+}
+.boot-box{
+  position:relative; width:220px; height:30px; line-height:30px;
+  border:1px solid rgba(142,166,200,.4); padding:0 12px;
+  font-family:'FZTieXHJW','Rajdhani'; font-size:14px; letter-spacing:3px;
+  color:#aebfda;
+}
+.boot-lines{
+  margin-top:34px; min-height:96px; text-align:center;
+  font-family:'FZTieXHJW','Rajdhani'; font-size:12.5px; letter-spacing:1px;
+  line-height:2; color:rgba(142,166,200,.75); white-space:pre-line;
+}
+.boot-ip{
+  margin-top:10px; font-family:'Rajdhani'; font-size:12px;
+  letter-spacing:1px; line-height:1.9; color:rgba(151,195,255,.55);
+  text-align:center; white-space:pre-line; min-height:44px;
+}
+
+/* 返回主站的小暗门(不属于壁纸,放到几乎不可见的角落) */
+.back-home{
+  position:fixed; right:14px; bottom:10px; z-index:30;
+  font-family:'Rajdhani'; font-size:11px; letter-spacing:2px;
+  color:rgba(120,140,170,.28); text-decoration:none; pointer-events:auto;
+}
+.back-home:hover{ color:rgba(151,195,255,.7); }
+
+@media (max-width:760px){
+  #hClock{ font-size:38px; }
+  .menu-left{ left:6%; top:58%; }
+  #hEra{ font-size:22px; letter-spacing:6px; }
+  #hState{ font-size:13px; margin-top:16px; }
+  #hTemp{ font-size:13.5px; margin-top:14px; }
+  .menu-right{ display:none; }
+  .log-block{ font-size:11px; top:22%; }
+  .audio-block{ width:78vw; height:48px; bottom:11%; }
+  #hYears{ font-size:14px; }
+}
