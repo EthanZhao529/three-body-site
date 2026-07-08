@@ -21,8 +21,6 @@ const RAS = 0.1, KSOFT = 2.8, KRAS = KSOFT * RAS;
 const A_BETA = 3 / (KSOFT - 1), A_ALPHA = 1 - A_BETA;
 const DD = 6;                    // 逃逸阈值(对质心)
 const XC = 2, VC = 0.1;          // 随机初始:位置±1,速度±0.05
-// 引力牢笼(壁纸软牢笼,用户 project.json 参数:Mc=1.5e7,k1=0,re=0.1,k2=0.5,rc=0.2,n=2)
-const CAGE_GM = G * 1.5e7, CAGE_K2 = 0.5, CAGE_RC = 0.2, CAGE_N = 2;
 
 // Yoshida 1990 四阶辛积分系数
 const Yw1 = 1.35120719196, Yw0 = -1.70241438392;
@@ -71,16 +69,6 @@ function drift(c) {
 function kick(d) {
   const acc = [];
   for (let i = 0; i < 4; i++) acc.push(accOn(i));
-  // 引力牢笼:r>rc 时向质心回拉 k2·G·Mc·(r-rc)^n,防天体逃逸(壁纸软牢笼)
-  const com = computeCOM();
-  for (let i = 0; i < 4; i++) {
-    const dx = B[i].x - com.x, dy = B[i].y - com.y, dz = B[i].z - com.z;
-    const r = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (r > CAGE_RC) {
-      const mag = CAGE_K2 * CAGE_GM * Math.pow(r - CAGE_RC, CAGE_N) / Math.max(r, 1e-6);
-      acc[i][0] -= mag * dx; acc[i][1] -= mag * dy; acc[i][2] -= mag * dz;
-    }
-  }
   for (let i = 0; i < 4; i++) {
     B[i].vx += d * TS * acc[i][0]; B[i].vy += d * TS * acc[i][1]; B[i].vz += d * TS * acc[i][2];
   }
@@ -236,8 +224,9 @@ function glowTexture() {
   x.fillStyle = g; x.fillRect(0, 0, s, s);
   return new THREE.CanvasTexture(cv);
 }
-const sunMap = texLoader.load('assets/wp/sun_gray.jpg');
+const sunMap = texLoader.load('assets/wp/sun.webp');   // 0aun:三星材质共用的真·日面
 sunMap.colorSpace = THREE.NoColorSpace;
+sunMap.anisotropy = MAX_ANISO;
 const flareMap = texLoader.load('assets/wp/flare.png');
 const glowSoft = glowTexture();
 
@@ -248,9 +237,9 @@ const glowSoft = glowTexture();
 //   星3 (1,.494,.431)·1+(1,.514,.373)·2 → #FF8164
 // 尺寸:h1z/h2z/h3z=0.03/0.023/0.016,世界半径 0.25/0.192/0.133(桌面视占比核验)
 const SUNS = [
-  { core: 0xffffff, r: 0.250, flareScale: 2.00 },   // sa3 世界尺寸=512×0.13×h1z
-  { core: 0xffb19b, r: 0.192, flareScale: 1.53 },
-  { core: 0xff8164, r: 0.133, flareScale: 1.07 }
+  { core: 0xffffff, r: 0.215, flareScale: 2.00 },   // 半径=7.2×hNz(sa3尺寸链+桌面盘面3.1vh反推)
+  { core: 0xffb19b, r: 0.165, flareScale: 1.53 },   // sa3 世界尺寸=512×0.13×hNz
+  { core: 0xff8164, r: 0.115, flareScale: 1.07 }
 ];
 const SA3_TINT = 0xffcbb1;   // 三星同色 _16/_24/_33 = (1,0.796,0.694)
 const suns = [];
@@ -275,7 +264,7 @@ for (let i = 0; i < 3; i++) {
 // 发光色随温度冻蓝↔灼红=材质 emissive 脚本原样;无光晕精灵,辉光交给泛光)
 const earthMat = new THREE.MeshBasicMaterial({ map: texLoader.load('assets/wp/earth.jpg') });
 const planetG = new THREE.Group();
-const planetBall = new THREE.Mesh(new THREE.SphereGeometry(0.083, 32, 24), earthMat);
+const planetBall = new THREE.Mesh(new THREE.SphereGeometry(0.01, 16, 12), earthMat);
 planetG.add(planetBall);
 world.add(planetG);
 function planetTint(tem, out) {
@@ -386,9 +375,9 @@ let compassA = 0;
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-// WE 内置 HDR 泛光(scene.general 解码:strength=4,scatter=2,threshold=0.46):
-// threshold 原值;scatter→大半径;强度按桌面截图光晕标定(WE与Unreal强度量纲不同)
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 1.15, 1.0, 0.46));
+// WE 内置 HDR 泛光:WE 阈值 0.46 作用于 HDR 亮度(恒星自发光≈2-3),LDR 里等效=只取最亮端;
+// 恒星盘面(0.7-1.0)大部分不炫化,纹理可见,泛光只给高光和微小亮源(行星点)发光
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.75, 0.8, 0.85));
 
 // godrays 移植(effects/godrays 解码:方向π·强度0.3·阈值0.45,含原版的噪声调制预处理)
 const godraysPass = new ShaderPass({
