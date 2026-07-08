@@ -208,8 +208,8 @@ camera.position.set(0, 0, 6);
 camera.lookAt(0, 0, 0);
 
 const texLoader = new THREE.TextureLoader();
-// 天空盒00(scene.json 解码):st2 原图·亮度1·白色调制·绕Y -135°·静止
-const skyTex = texLoader.load('assets/wp/sky8k.jpg');
+// 天空盒00(scene.json 解码):st2 原图·亮度1·白色调制·绕Y -135°·静止(WebP:暗部无压缩噪)
+const skyTex = texLoader.load('assets/wp/sky8k.webp');
 skyTex.anisotropy = MAX_ANISO;
 const sky = new THREE.Mesh(
   new THREE.SphereGeometry(80, 64, 40),
@@ -427,11 +427,34 @@ const godraysPass = new ShaderPass({
 });
 composer.addPass(godraysPass);
 
-// 胶片颗粒(filmgrain.frag 移植:双噪声相乘,strength=0.15) + CRT(opacity=0.03)
+// 胶片颗粒(filmgrain.vert/frag 完整移植:双层连续滚动噪声纹理·通道错位·灰度相乘·
+// scale=7·strength=0.15;混合取"黑处不变"的叠加族——原版 BLENDMODE 12 属 PS 叠加族)
+// + CRT(0.03:荫罩 + 乘性静噪 0.49,黑处同样不变)
+const noiseTex = (function () {
+  const s = 256, cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const x = cv.getContext('2d');
+  const d = x.createImageData(s, s);
+  for (let i = 0; i < d.data.length; i += 4) {
+    d.data[i] = Math.random() * 255;
+    d.data[i + 1] = Math.random() * 255;
+    d.data[i + 2] = Math.random() * 255;
+    d.data[i + 3] = 255;
+  }
+  x.putImageData(d, 0, 0);
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.minFilter = THREE.LinearFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.generateMipmaps = false;
+  return t;
+})();
 const grainPass = new ShaderPass({
   uniforms: {
     tDiffuse: { value: null },
+    tNoise: { value: noiseTex },
     uTime: { value: 0 },
+    uAspect: { value: 1 },
     uRes: { value: new THREE.Vector2(1, 1) },
     uGrain: { value: 0.15 },
     uCrt: { value: 0.03 }
@@ -442,22 +465,31 @@ const grainPass = new ShaderPass({
   fragmentShader:
     'varying vec2 vUv;\n' +
     'uniform sampler2D tDiffuse;\n' +
+    'uniform sampler2D tNoise;\n' +
     'uniform float uTime;\n' +
+    'uniform float uAspect;\n' +
     'uniform vec2 uRes;\n' +
     'uniform float uGrain;\n' +
     'uniform float uCrt;\n' +
-    'float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }\n' +
+    'float grey(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }\n' +
     'void main(){\n' +
     '  vec4 c = texture2D(tDiffuse, vUv);\n' +
-    '  vec2 cell = floor(vUv * uRes / 2.0);\n' +
-    '  float t = floor(uTime * 24.0);\n' +
-    '  float n1 = h(cell + t * 7.31);\n' +
-    '  float n2 = h(cell * 1.7 + 13.7 + t * 3.77);\n' +
+    // filmgrain.vert 原式:uv1=(uv+t)·scale·(aspect,1), uv2=(uv−2.5t)·scale·0.52·(aspect,1)
+    '  float t = fract(uTime);\n' +
+    '  vec2 uv1 = (vUv + t) * 7.0 * vec2(uAspect, 1.0);\n' +
+    '  vec2 uv2 = (vUv - t * 2.5) * 7.0 * 0.52 * vec2(uAspect, 1.0);\n' +
+    // filmgrain.frag 原式:第二层取 .gbr 通道,灰度化后相乘
+    '  float n1 = grey(texture2D(tNoise, uv1).rgb);\n' +
+    '  float n2 = grey(texture2D(tNoise, uv2).gbr);\n' +
     '  float g = clamp(n1 * n2, 0.0, 1.0);\n' +
-    '  c.rgb += (g - 0.22) * uGrain * 0.55;\n' +
+    // 叠加混合(黑处不变):base<0.5 → 2bg,否则 1−2(1−b)(1−g);按 strength 插值
+    '  vec3 ov = mix(2.0 * c.rgb * g, 1.0 - 2.0 * (1.0 - c.rgb) * (1.0 - g), step(0.5, c.rgb));\n' +
+    '  c.rgb = mix(c.rgb, ov, uGrain);\n' +
+    // CRT:荫罩横纹 + 乘性静噪(振幅×0.49×0.03,黑处为零)
     '  float scan = 0.5 + 0.5 * sin(vUv.y * uRes.y * 3.14159);\n' +
     '  c.rgb *= 1.0 - uCrt * 0.5 * scan;\n' +
-    '  c.rgb += (h(cell + t * 1.3) - 0.5) * uCrt * 0.49 * 0.3;\n' +
+    '  float sn = texture2D(tNoise, vUv * uRes / 256.0 + t).r - 0.5;\n' +
+    '  c.rgb *= 1.0 + sn * uCrt * 0.49;\n' +
     '  gl_FragColor = c;\n' +
     '}'
 });
@@ -467,6 +499,7 @@ function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
   composer.setSize(innerWidth * DPR, innerHeight * DPR);
   grainPass.uniforms.uRes.value.set(innerWidth * DPR, innerHeight * DPR);
+  grainPass.uniforms.uAspect.value = innerWidth / innerHeight;
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
 }
