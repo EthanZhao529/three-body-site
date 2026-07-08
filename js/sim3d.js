@@ -14,9 +14,10 @@ try {
   const canvas = document.getElementById('gl');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-  const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
   renderer.setPixelRatio(DPR);
   renderer.setClearColor(0x070605, 1);
+  const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 200);
@@ -27,11 +28,12 @@ try {
     const t = texLoader.load(url);
     return t;
   }
-  // 银河全景天空球(三体演算壁纸的 st2 天空盒)
-  const skyGeo = new THREE.SphereGeometry(80, 48, 32);
+  // 银河全景天空球(三体演算壁纸 st2 原版 8K 全景,6144 宽出图)
+  const skyTex = loadTex('assets/wp/galaxy8k.jpg');
+  skyTex.anisotropy = MAX_ANISO;
+  const skyGeo = new THREE.SphereGeometry(80, 64, 40);
   const skyMat = new THREE.MeshBasicMaterial({
-    map: loadTex('assets/wp/milkyway.jpg'), side: THREE.BackSide,
-    depthWrite: false
+    map: skyTex, side: THREE.BackSide, depthWrite: false
   });
   const sky = new THREE.Mesh(skyGeo, skyMat);
   scene.add(sky);
@@ -85,7 +87,6 @@ try {
     { core: 0xffbb9b, glow: 0xffc9a8, r: 0.075 },   // 恒星2 奶橙(1,.73,.61)
     { core: 0xff8370, glow: 0xff8a5f, r: 0.096 }    // 恒星3 红橙(1,.51,.43)
   ];
-  const CHAOS = new THREE.Color(0xe04034);
   const suns = [];
   for (let si = 0; si < TINTS.length; si++) {
     const t = TINTS[si];
@@ -163,8 +164,8 @@ try {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     scene.add(new THREE.Points(g, new THREE.PointsMaterial({
-      color: 0xd9d4c8, size: 0.045, sizeAttenuation: true,
-      transparent: true, opacity: 0.75, depthWrite: false
+      color: 0xd9d4c8, size: 0.03, sizeAttenuation: true,
+      transparent: true, opacity: 0.5, depthWrite: false
     })));
   })();
 
@@ -286,7 +287,6 @@ try {
 
   /* ---------- 渲染循环:读 main.js 的物理与视角状态 ---------- */
   const tmpColor = new THREE.Color();
-  let chaosMix = 0;
   let lastT = performance.now();
 
   function frame() {
@@ -336,7 +336,7 @@ try {
     // 相机:方位角=拖拽 rotY,仰角=拖拽 rotX + 电影感缓慢俯仰漂移
     const d1 = view.d1 !== undefined ? view.d1 : view.d;
     const zin = d1 < 0 ? 1 + 2.4 * Math.pow(-d1, 2) * (3 - 2 * -d1) : 1;
-    const R = 4.1 * zin;
+    const R = 6.2 * zin;
     const azim = rot.y * Math.PI / 180;
     const elevDeg = 12 - rot.x + 2.2 * Math.sin(now / 23000);
     const elev = Math.max(-1.35, Math.min(1.35, elevDeg * Math.PI / 180));
@@ -344,8 +344,6 @@ try {
     camera.position.set(ch * Math.sin(azim), R * Math.sin(elev), ch * Math.cos(azim));
     camera.lookAt(0, 0, 0);
 
-    // 混沌红移(平滑过渡)
-    chaosMix += ((st.chaosMode ? 1 : 0) - chaosMix) * 0.06;
     const civ = window.__civ;
 
     // 恒星与行星位置(sim 平面 x,y → 世界 x,z;出平面 z → 世界 y)
@@ -353,10 +351,6 @@ try {
       const b = st.b[i], s = suns[i];
       s.group.position.set(b.x, b.z, b.y);
       s.core.rotation.y = now * 0.00006 * (i + 1);   // 日面自转
-      s.core.material.color.copy(s.baseCore).lerp(CHAOS, chaosMix);
-      tmpColor.copy(s.baseGlow).lerp(CHAOS, chaosMix);
-      s.s1.material.color.copy(tmpColor);
-      s.s2.material.color.copy(tmpColor);
       // 交会光涌:恒星逼近行星时光晕暴涨(壁纸近距交会的"三日凌空"质感)
       const dNear = civ ? civ.d[i] : 1.5;
       const boost = 1 + 1.9 / (1 + dNear * dNear * 4);
@@ -381,7 +375,7 @@ try {
       const n = Math.min(tr.length, TRAIL_N);
       const pos = t3.geo.attributes.position.array;
       const col = t3.geo.attributes.color.array;
-      if (i < 3) tmpColor.copy(suns[i].baseGlow).lerp(CHAOS, chaosMix);
+      if (i < 3) tmpColor.copy(suns[i].baseGlow);
       else tmpColor.copy(TRAIL_COLS[3]);
       for (let j = 0; j < n; j++) {
         const p = tr[tr.length - n + j];

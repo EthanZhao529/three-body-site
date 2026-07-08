@@ -136,27 +136,41 @@
   var Yw1 = 1.35120719196, Yw0 = -1.70241438392;
   var Yc1 = Yw1 / 2, Yc2 = (Yw0 + Yw1) / 2, Yc3 = Yc2, Yc4 = Yc1;
   var Yd1 = Yw1, Yd2 = Yw0, Yd3 = Yw1;
-  // Aarseth 软化(壁纸默认 ras=0.1/k=2.8;此处 ras 调小以保周期解稳定)
-  var RAS = 0.05, KSOFT = 2.8, KRAS = KSOFT * RAS;
+  // Aarseth 软化(壁纸默认 ras=0.1/k=2.8)
+  var RAS = 0.1, KSOFT = 2.8, KRAS = KSOFT * RAS;
   var BETA = 3 / (KSOFT - 1), ALPHA = 1 - BETA;
   var DD = 4.5;   // 逃逸重启距离(对质心,壁纸同款)
 
-  var sim = { b: [], pl: {}, trails: [[], [], [], []], chaosMode: false };
+  var sim = { b: [], pl: {}, trails: [[], [], [], []] };
   // 壁纸三星配色:恒星1 白(光度1.5) / 恒星2 奶橙(0.5) / 恒星3 红橙(0.1,红巨星最大)
   var SIM_COLS = [
     { core: '#fff8ef', mid: '244,247,255', r: 9 },
     { core: '#ffe3d2', mid: '255,187,155', r: 11 },
-    { core: '#ffc0ad', mid: '255,131,95', r: 14 }
+    { core: '#ffc0ad', mid: '255,131,95', r: 14 },
+    { core: '#9db2c4', mid: '127,159,208', r: 4 }
   ];
+  // 壁纸随机模式:四体位置 ±xc/2、速度 ±vc/2 均匀分布(xcxc=1.5,vcvc=1)
   function simReset() {
-    sim.b = [
-      { x: -0.97000436, y: 0.24308753, z: 0, vx: 0.4662036850, vy: 0.4323657300, vz: 0 },
-      { x: 0.97000436, y: -0.24308753, z: 0, vx: 0.4662036850, vy: 0.4323657300, vz: 0 },
-      { x: 0, y: 0, z: 0, vx: -0.93240737, vy: -0.86473146, vz: 0 }
-    ];
-    sim.pl = { x: 1.7, y: 1.15, z: 0.1, vx: -0.34, vy: 0.3, vz: 0.02 };
+    var XC = 1.5, VC = 1.0, bs = [];
+    for (var i = 0; i < 4; i++) {
+      bs.push({
+        x: (Math.random() - 0.5) * XC, y: (Math.random() - 0.5) * XC, z: (Math.random() - 0.5) * XC,
+        vx: (Math.random() - 0.5) * VC, vy: (Math.random() - 0.5) * VC, vz: (Math.random() - 0.5) * VC
+      });
+    }
+    // 消除整体漂移:三星质心位置/速度归零,保持系统在画面中央
+    var mx = 0, my = 0, mz = 0, wx = 0, wy = 0, wz = 0;
+    for (i = 0; i < 3; i++) {
+      mx += bs[i].x / 3; my += bs[i].y / 3; mz += bs[i].z / 3;
+      wx += bs[i].vx / 3; wy += bs[i].vy / 3; wz += bs[i].vz / 3;
+    }
+    for (i = 0; i < 4; i++) {
+      bs[i].x -= mx; bs[i].y -= my; bs[i].z -= mz;
+      bs[i].vx -= wx; bs[i].vy -= wy; bs[i].vz -= wz;
+    }
+    sim.b = bs.slice(0, 3);
+    sim.pl = bs[3];
     sim.trails = [[], [], [], []];
-    sim.chaosMode = false;
   }
   simReset();
 
@@ -196,31 +210,25 @@
   // 一步 = 7 段 drift-kick 序列(壁纸 updatePhysics 同款)
   function yoshidaStep() {
     drift(Yc1); kick(Yd1); drift(Yc2); kick(Yd2); drift(Yc3); kick(Yd3); drift(Yc4);
-    var p = sim.pl;
-    if (p.x * p.x + p.y * p.y + p.z * p.z > 60) {
-      p.x = 1.7; p.y = -1.2; p.z = 0.1; p.vx = -0.3; p.vy = 0.34; p.vz = 0.02;
-    }
   }
-  var trailTick = 0;
   var simEscaped = false;   // 本帧发生"天体逃逸"重启(供文明系统记事)
   function simAdvance(steps) {
     for (var s = 0; s < steps; s++) {
       yoshidaStep();
-      if (++trailTick % 3 === 0) {
-        for (var i = 0; i < 3; i++) {
-          sim.trails[i].push([sim.b[i].x, sim.b[i].y, sim.b[i].z]);
-          if (sim.trails[i].length > 400) sim.trails[i].shift();
-        }
-        sim.trails[3].push([sim.pl.x, sim.pl.y, sim.pl.z]);
-        if (sim.trails[3].length > 400) sim.trails[3].shift();
+      for (var i = 0; i < 3; i++) {
+        sim.trails[i].push([sim.b[i].x, sim.b[i].y, sim.b[i].z]);
+        if (sim.trails[i].length > 400) sim.trails[i].shift();
       }
+      sim.trails[3].push([sim.pl.x, sim.pl.y, sim.pl.z]);
+      if (sim.trails[3].length > 400) sim.trails[3].shift();
     }
-    // 质心距离超过 DD → 恢复秩序(壁纸的"重启",记为天体逃逸)
+    // 任一天体(含行星)脱离三星质心 DD → 天体逃逸,随机重启(壁纸模式)
     var cx = (sim.b[0].x + sim.b[1].x + sim.b[2].x) / 3;
     var cy2 = (sim.b[0].y + sim.b[1].y + sim.b[2].y) / 3;
     var cz = (sim.b[0].z + sim.b[1].z + sim.b[2].z) / 3;
-    for (var q = 0; q < 3; q++) {
-      var rx = sim.b[q].x - cx, ry = sim.b[q].y - cy2, rz = sim.b[q].z - cz;
+    var all = [sim.b[0], sim.b[1], sim.b[2], sim.pl];
+    for (var q = 0; q < 4; q++) {
+      var rx = all[q].x - cx, ry = all[q].y - cy2, rz = all[q].z - cz;
       if (Math.sqrt(rx * rx + ry * ry + rz * rz) > DD) { simEscaped = true; simReset(); break; }
     }
   }
@@ -256,21 +264,6 @@
     if (!rot.dragging && Math.abs(rot.vy) < 0.02) rot.y += 0.028; // 闲时自旋
     if (rot.x > 80) rot.x = 80; if (rot.x < -80) rot.x = -80;
   }
-  var perturbBtn = document.getElementById('perturbBtn');
-  var resetBtn = document.getElementById('resetBtn');
-  if (perturbBtn) perturbBtn.addEventListener('click', function () {
-    for (var i = 0; i < 3; i++) {
-      sim.b[i].vx += (Math.random() - 0.5) * 0.24;
-      sim.b[i].vy += (Math.random() - 0.5) * 0.24;
-      sim.b[i].vz += (Math.random() - 0.5) * 0.18;  // 冲出轨道平面,拖拽旋转可见
-    }
-    sim.chaosMode = true;
-  });
-  if (resetBtn) resetBtn.addEventListener('click', function () {
-    simEscaped = true;   // 壁纸:手动复位=天体逃逸
-    simReset();
-  });
-
   /* ============================================================
      文明纪年系统 —— 壁纸 scene.pkg 内嵌引擎的原样移植
      (阈值/公式/事件文案全部来自原脚本,一字未改)
@@ -505,13 +498,12 @@
     // 机位从"舰队近景"继续拉远进场:由大到常
     var zin = d < 0 ? 1 + 2.4 * easeIO(-d) : 1 + 0.12 * easeIO(clamp01(d));
     var cx = W / 2, cy = H * 0.47;
-    var sc = Math.min(W, H) / 3.8 / zin;
-    var tint = sim.chaosMode;
+    var sc = Math.min(W, H) / 5.6 / zin;
 
     ctx.globalCompositeOperation = 'lighter';
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 4; i++) {
       var tr = sim.trails[i];
-      var col = tint ? '224,64,52' : SIM_COLS[i].mid;
+      var col = SIM_COLS[i].mid;
       var prev = null;
       for (var j = 0; j < tr.length; j++) {
         var rp = applyRotation(tr[j][0], tr[j][1], tr[j][2]);
@@ -533,7 +525,7 @@
       var px = cx + rk.x * sc, py = cy + rk.y * sc;
       var depth = clamp01(0.5 + rk.z * 0.22);           // 近大远小的深度线索
       var R = SIM_COLS[k].r * DPR / Math.sqrt(zin) * (0.75 + depth * 0.5);
-      var mid = tint ? '224,64,52' : SIM_COLS[k].mid;
+      var mid = SIM_COLS[k].mid;
       var g1 = ctx.createRadialGradient(px, py, 0, px, py, R * 9);
       g1.addColorStop(0, 'rgba(' + mid + ',' + 0.3 * a + ')');
       g1.addColorStop(0.4, 'rgba(' + mid + ',' + 0.1 * a + ')');
@@ -852,6 +844,7 @@
 
   /* ---------- 主循环 ---------- */
   var lastNow = performance.now();
+  var stepAcc = 0;
   function frame(now) {
     var dtMs = Math.min(50, now - lastNow); lastNow = now;
     // 弹簧
@@ -861,8 +854,11 @@
     if (Math.abs(page - pf) < 0.0006 && Math.abs(pv) < 0.002) { pf = page; pv = 0; }
     if (pagesEl) pagesEl.style.transform = 'translateY(' + (-pf * 100) + 'vh)';
 
-    // 实时演算持续推进(约 240 步/秒) + 文明纪年 + 视角惯性
-    simAdvance(Math.max(1, Math.round(dtMs * 0.24)));
+    // 实时演算缓速推进(约 24 步/秒,壁纸的从容节奏) + 文明纪年 + 视角惯性
+    stepAcc += dtMs * 0.024;
+    var simSteps = Math.floor(stepAcc);
+    stepAcc -= simSteps;
+    simAdvance(simSteps);
     civAdvance(dt);
     rotAdvance();
     // 暴露给 Three.js 渲染层(演算页 + 水滴页)
