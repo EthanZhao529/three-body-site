@@ -236,20 +236,23 @@ const glowSoft = glowTexture();
 //   星2 (1,.6,.6)·0.85+(1,.733,.608)·2 → #FFB19B
 //   星3 (1,.494,.431)·1+(1,.514,.373)·2 → #FF8164
 // 尺寸:h1z/h2z/h3z=0.03/0.023/0.016,世界半径 0.25/0.192/0.133(桌面视占比核验)
+// HDR 双通道(材质json原式,不归一):tex×color×brightness + tex×emissive×emissivebrightness
+//   星1 (1,1,1)·1+(1,1,1)·1        = (2.00, 2.00, 2.00)
+//   星2 (1,.6,.6)·0.85+(1,.733,.608)·2 = (2.85, 1.98, 1.73)
+//   星3 (1,.494,.431)·1+(1,.514,.373)·2 = (3.00, 1.52, 1.18)
 const SUNS = [
-  { core: 0xffffff, r: 0.215, flareScale: 2.00 },   // 半径=7.2×hNz(sa3尺寸链+桌面盘面3.1vh反推)
-  { core: 0xffb19b, r: 0.165, flareScale: 1.53 },   // sa3 世界尺寸=512×0.13×hNz
-  { core: 0xff8164, r: 0.115, flareScale: 1.07 }
+  { hdr: [2.00, 2.00, 2.00], r: 0.215, flareScale: 2.00 },   // 半径=7.2×hNz
+  { hdr: [2.85, 1.98, 1.73], r: 0.165, flareScale: 1.53 },   // sa3 尺寸=512×0.13×hNz
+  { hdr: [3.00, 1.52, 1.18], r: 0.115, flareScale: 1.07 }
 ];
 const SA3_TINT = 0xffcbb1;   // 三星同色 _16/_24/_33 = (1,0.796,0.694)
 const suns = [];
 for (let i = 0; i < 3; i++) {
   const t = SUNS[i];
   const g = new THREE.Group();
-  const core = new THREE.Mesh(
-    new THREE.SphereGeometry(t.r, 48, 32),
-    new THREE.MeshBasicMaterial({ map: sunMap, color: t.core })
-  );
+  const sunMat = new THREE.MeshBasicMaterial({ map: sunMap });
+  sunMat.color.setRGB(t.hdr[0], t.hdr[1], t.hdr[2]);   // >1:进 HDR 缓冲,泛光阈值0.46同 WE 语义
+  const core = new THREE.Mesh(new THREE.SphereGeometry(t.r, 48, 32), sunMat);
   // sa3 光晕(壁纸原参:alpha 0.59,不旋转,跟随本体)
   const flare = new THREE.Sprite(new THREE.SpriteMaterial({
     map: flareMap, color: SA3_TINT, transparent: true,
@@ -267,6 +270,49 @@ const planetG = new THREE.Group();
 const planetBall = new THREE.Mesh(new THREE.SphereGeometry(0.01, 16, 12), earthMat);
 planetG.add(planetBall);
 world.add(planetG);
+// OL 标注套件(scene.json objects[95-111] 解码:圈+引线贴图 OL.png,实时坐标文本,
+// 位置标签 datacolor 淡蓝;三星 尺寸400×0.003=1.2,行星 400×0.002=0.8;深度测试可被星体遮挡)
+const OL_TEX = texLoader.load('assets/wp/ui/OL.png');
+const OL_LABELS = ['L/1st-Arm/3S-S1', 'L/1st-Arm/3S-S2', 'L/1st-Arm/3S-S3', 'L/1st-Arm/3S:1P'];
+const olKits = [];
+for (let i = 0; i < 4; i++) {
+  const s = i < 3 ? 1.2 : 0.8;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: OL_TEX, color: 0x97c3ff, transparent: true, opacity: 0.8, depthWrite: false
+  }));
+  spr.scale.set(s, s, 1);
+  spr.center.set(0.22, 0.82);          // OL.png 圆心锚定天体
+  world.add(spr);
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 128;
+  const c2 = cv.getContext('2d');
+  const tex = new THREE.CanvasTexture(cv);
+  const txt = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, transparent: true, depthWrite: false
+  }));
+  txt.scale.set(1.5, 0.375, 1);
+  txt.center.set(0, 0.5);              // 左中锚点,接引线末端
+  world.add(txt);
+  olKits.push({ spr, txt, cv, c2, tex, s, label: OL_LABELS[i], lastDraw: 0 });
+}
+function updateOL(i, x, y, z, now) {
+  const k = olKits[i];
+  k.spr.position.set(x, y, z);
+  k.txt.position.set(x + 0.80 * k.s, y + 0.20 * k.s, z);
+  if (now - k.lastDraw > 150) {
+    k.lastDraw = now;
+    const c2 = k.c2;
+    c2.clearRect(0, 0, 512, 128);
+    c2.fillStyle = 'rgba(151,195,255,0.9)';
+    c2.font = '44px Rajdhani, Consolas, monospace';
+    c2.fillText('[' + x.toFixed(2) + ', ' + y.toFixed(2) + ', ' + z.toFixed(2) + ']', 6, 48);
+    c2.font = '40px Rajdhani, Consolas, monospace';
+    c2.fillStyle = 'rgba(151,195,255,0.7)';
+    c2.fillText(k.label, 6, 104);
+    k.tex.needsUpdate = true;
+  }
+}
+
 function planetTint(tem, out) {
   if (tem <= -100) { const k = Math.max(0, (tem + 210) / 110); out.setRGB(k, k, 1); }
   else if (tem >= 10) { const k = Math.min(1, (tem - 10) / 990); out.setRGB(1, 1 - k, 1 - k); }
@@ -274,8 +320,10 @@ function planetTint(tem, out) {
   return out;
 }
 
-// 轨迹 ×4(壁纸原参:trailLength=400·每帧一点·线性渐隐,颜色=project.json 天体颜色)
+// 轨迹 ×4(壁纸原式:400 个发光点精灵·每帧一点·尺寸 0.00013→0.0002 线性·透明度线性;
+// 点世界直径=halo 256px×scale → 0.0333→0.0512,柔光珠链)
 const TRAIL_N = 400;
+const TRAIL_SIZE_A = 256 * 0.00013, TRAIL_SIZE_B = 256 * 0.0002;
 const TRAIL_COLS = [
   new THREE.Color(1, 1, 1),
   new THREE.Color(1, 0.839, 0.518),
@@ -283,18 +331,48 @@ const TRAIL_COLS = [
   new THREE.Color(0.286, 0.604, 1)
 ];
 const trailsData = [[], [], [], []];
-const trailLines = [];
+const trailPoints = [];
+const TRAIL_VERT =
+  'attribute float aT;\n' +
+  'varying float vT;\n' +
+  'uniform float uPxScale;\n' +
+  'uniform float uSizeA;\n' +
+  'uniform float uSizeB;\n' +
+  'void main(){\n' +
+  '  vT = aT;\n' +
+  '  vec4 mv = modelViewMatrix * vec4(position, 1.0);\n' +
+  '  float sz = mix(uSizeA, uSizeB, aT);\n' +
+  '  gl_PointSize = sz * uPxScale / max(-mv.z, 0.1);\n' +
+  '  gl_Position = projectionMatrix * mv;\n' +
+  '}';
+const TRAIL_FRAG =
+  'varying float vT;\n' +
+  'uniform vec3 uColor;\n' +
+  'void main(){\n' +
+  '  float d = length(gl_PointCoord - 0.5) * 2.0;\n' +
+  '  float fall = max(1.0 - d, 0.0);\n' +
+  '  fall = fall * fall;\n' +
+  '  gl_FragColor = vec4(uColor * vT * fall, 1.0);\n' +
+  '}';
 for (let i = 0; i < 4; i++) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_N * 3), 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(TRAIL_N * 3), 3));
-  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({
-    vertexColors: true, transparent: true, opacity: 1,
-    blending: THREE.AdditiveBlending, depthWrite: false
-  }));
-  line.frustumCulled = false;
-  world.add(line);
-  trailLines.push(geo);
+  geo.setAttribute('aT', new THREE.BufferAttribute(new Float32Array(TRAIL_N), 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: TRAIL_COLS[i] },
+      uPxScale: { value: 1000 },
+      uSizeA: { value: TRAIL_SIZE_A },
+      uSizeB: { value: TRAIL_SIZE_B }
+    },
+    vertexShader: TRAIL_VERT,
+    fragmentShader: TRAIL_FRAG,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+  });
+  const pts = new THREE.Points(geo, mat);
+  pts.frustumCulled = false;
+  world.add(pts);
+  trailPoints.push({ geo, mat });
 }
 
 // 尘埃粒子(壁纸 star1/star2 解码:尺寸0.1/0.07·计数0.5/1·亮度2·alpha0.95·
@@ -316,15 +394,15 @@ function dustLayer(count, size) {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const p = new THREE.Points(g, new THREE.PointsMaterial({
     color: 0xf1defe, size, sizeAttenuation: true, map: glowSoft,
-    transparent: true, opacity: 0.5, depthWrite: false,
+    transparent: true, opacity: 0.85, depthWrite: false,
     blending: THREE.AdditiveBlending
   }));
   p.userData.vel = vel;
   scene.add(p);
   dustGroups.push(p);
 }
-dustLayer(40, 0.05);    // dust1:size 0.1 × count 0.5
-dustLayer(80, 0.035);   // dust2:size 0.07 × count 1
+dustLayer(40, 0.09);    // dust1:size 0.1 × count 0.5(亮度2 → 提尺寸/不透明度)
+dustLayer(80, 0.063);   // dust2:size 0.07 × count 1
 function advanceDust(dt) {
   for (const p of dustGroups) {
     const pos = p.geometry.attributes.position.array, vel = p.userData.vel;
@@ -375,9 +453,30 @@ let compassA = 0;
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-// WE 内置 HDR 泛光:WE 阈值 0.46 作用于 HDR 亮度(恒星自发光≈2-3),LDR 里等效=只取最亮端;
-// 恒星盘面(0.7-1.0)大部分不炫化,纹理可见,泛光只给高光和微小亮源(行星点)发光
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.75, 0.8, 0.85));
+// WE 内置 HDR 泛光(scene.general 原值):threshold=0.46 直接作用于 HDR 亮度
+// (恒星盘面 2-3,超出量 1.5-2.5 → 红/金星同样有紧贴光晕);scatter=2→大半径;
+// 强度为 WE/Unreal 量纲差的唯一标定项(对照桌面光晕)
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 1.2, 0.8, 0.46));
+
+// HDR→显示 色调映射(WE hdr:true 的显示端;ACES 近似,保 HDR 盘面纹理对比)
+const tonemapPass = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, uExposure: { value: 1.15 } },
+  vertexShader:
+    'varying vec2 vUv;\n' +
+    'void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader:
+    'varying vec2 vUv;\n' +
+    'uniform sampler2D tDiffuse;\n' +
+    'uniform float uExposure;\n' +
+    'vec3 aces(vec3 x){\n' +
+    '  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n' +
+    '}\n' +
+    'void main(){\n' +
+    '  vec4 c = texture2D(tDiffuse, vUv);\n' +
+    '  gl_FragColor = vec4(aces(c.rgb * uExposure), c.a);\n' +
+    '}'
+});
+composer.addPass(tonemapPass);
 
 // godrays 移植(effects/godrays 解码:方向π·强度0.3·阈值0.45,含原版的噪声调制预处理)
 const godraysPass = new ShaderPass({
@@ -490,6 +589,9 @@ function resize() {
   composer.setSize(innerWidth * DPR, innerHeight * DPR);
   grainPass.uniforms.uRes.value.set(innerWidth * DPR, innerHeight * DPR);
   grainPass.uniforms.uAspect.value = innerWidth / innerHeight;
+  // 点精灵透视尺寸:设备像素/世界单位(单位距离处)
+  const pxScale = innerHeight * DPR / (2 * Math.tan(25 * Math.PI / 180));
+  for (const t of trailPoints) t.mat.uniforms.uPxScale.value = pxScale;
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
 }
@@ -646,25 +748,27 @@ function frame() {
   planetBall.rotation.x -= kTumble * Math.random();
   const tmp = new THREE.Color();
   planetTint(civ.temp, tmp);
-  earthMat.color.copy(tmp);
+  earthMat.color.copy(tmp).multiplyScalar(2.2);   // 行星材质 brightness=3 的 HDR 亮度(泛光发光点)
 
-  // 轨迹缓冲
+  // 轨迹缓冲(点精灵:位置 + 线性比例 aT,尺寸/透明度在 shader 内按原式插值)
   for (let i = 0; i < 4; i++) {
-    const tr = trailsData[i], geo = trailLines[i];
+    const tr = trailsData[i], geo = trailPoints[i].geo;
     const n = tr.length;
     const pos = geo.attributes.position.array;
-    const col = geo.attributes.color.array;
-    const c = TRAIL_COLS[i];
+    const at = geo.attributes.aT.array;
     for (let j = 0; j < n; j++) {
       const p = tr[j];
       pos[j * 3] = p[0]; pos[j * 3 + 1] = p[1]; pos[j * 3 + 2] = p[2];
-      const f = n > 1 ? j / (n - 1) : 1;   // 壁纸 updateTrailAppearance:线性 alpha 渐变
-      col[j * 3] = c.r * f; col[j * 3 + 1] = c.g * f; col[j * 3 + 2] = c.b * f;
+      at[j] = n > 1 ? j / (n - 1) : 1;
     }
     geo.setDrawRange(0, n);
     geo.attributes.position.needsUpdate = true;
-    geo.attributes.color.needsUpdate = true;
+    geo.attributes.aT.needsUpdate = true;
   }
+
+  // OL 标注跟随(实时坐标 = 质心系位置)
+  for (let i = 0; i < 4; i++)
+    updateOL(i, B[i].x - com.x, B[i].y - com.y, B[i].z - com.z, now);
 
   // 罗盘:按住浮现
   compassA += ((cDown ? 1 : 0) - compassA) * Math.min(1, dt * 5);
