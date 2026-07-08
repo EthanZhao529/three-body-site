@@ -13,45 +13,22 @@
 
 <!-- HUD(壁纸主界面) -->
 <div id="hud">
-  <div class="clock-block" id="clockBlock" title="点击 显示/隐藏 界面">
-    <div id="hClock">--:--</div>
-    <div id="hDay">--</div>
-    <div id="hDate">----</div>
-  </div>
   <div class="log-block" id="logBlock"></div>
-  <div class="menu-left">
+  <div class="state-block">
     <div id="hEra">乱纪元</div>
     <div id="hState">State : 脱水</div>
     <div id="hTemp">表面温度 : <span class="v" id="hTempV">--.--</span>°C</div>
   </div>
-  <div class="menu-right">
-    <div class="trow"><div class="ttrack"><div class="tfill" id="f3"></div></div><span class="lb">γ</span></div>
-    <div class="trow"><div class="ttrack"><div class="tfill" id="f2"></div></div><span class="lb">β</span></div>
-    <div class="trow"><div class="ttrack"><div class="tfill" id="f1"></div></div><span class="lb">α</span></div>
-  </div>
-  <div class="audio-block" id="audioBlock" title="点击 开/关 音乐">
-    <img class="bracket" src="assets/wp/ui/3f.png" alt="" />
-    <canvas id="wave"></canvas>
-  </div>
   <div id="hYears">0.00 Years</div>
 </div>
 
-<!-- 开机/登录序列(壁纸 加载信息 组:电源 → 登录 → 宇宙构建) -->
+<!-- 系统启动/重启遮罩 -->
 <div id="boot">
-  <img class="boot-power" id="bootPower" src="assets/wp/ui/LOAD-S.png" alt="power" />
-  <div class="boot-hint">接入「三体」</div>
-  <div class="boot-stage">
-    <div class="boot-spin-wrap">
-      <img class="boot-ring" src="assets/wp/ui/2y.png" alt="" />
-      <img class="boot-spinner" id="bootSpinner" src="assets/wp/ui/LOAD.png" alt="" />
-    </div>
-    <div class="boot-login">
-      <div class="boot-row"><img src="assets/wp/ui/LOAD-A.png" alt="" /><span class="bl">Account</span><span class="boot-box" id="bootAcc"></span></div>
-      <div class="boot-row"><img src="assets/wp/ui/LOAD-P.png" alt="" /><span class="bl">Password</span><span class="boot-box" id="bootPwd"></span></div>
-    </div>
-    <div class="boot-lines" id="bootLines"></div>
-    <div class="boot-ip" id="bootIp"></div>
+  <div class="boot-spin-wrap">
+    <img class="boot-ring" src="assets/wp/ui/2y.png" alt="" />
+    <img class="boot-spinner" id="bootSpinner" src="assets/wp/ui/LOAD.png" alt="" />
   </div>
+  <div class="boot-status" id="bootStatus">系统启动中</div>
 </div>
 
 <a class="back-home" href="index.html">THREE-BODY · SITE</a>

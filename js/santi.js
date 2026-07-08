@@ -170,7 +170,7 @@ function civAdvance(dt, runtime) {
   }
   if (ev.length) {
     civ.log.unshift({ y: year, txt: '第' + year + '年，' + ev.join('，') });
-    if (civ.log.length > 5) civ.log.pop();
+    if (civ.log.length > 10) civ.log.pop();
   }
   civ.era = cs.lk || cs.fx ||
     (civ.temp >= CIV.STAB_LO && civ.temp <= CIV.STAB_HI ? '恒纪元' : '乱纪元');
@@ -193,13 +193,14 @@ camera.position.set(0, 0, 8);
 camera.lookAt(0, 0, 0);
 
 const texLoader = new THREE.TextureLoader();
-// 天空:壁纸三层合成(st2银河 + B8k/BB8k3星带),相机固定→天空静止(壁纸同款)
-const skyTex = texLoader.load('assets/wp/galaxy8k.jpg');
+// 天空:壁纸三层按原始透明度合成(8K全分辨率,无增亮),缓慢自转消除"静止贴图"感
+const skyTex = texLoader.load('assets/wp/sky8k.jpg');
 skyTex.anisotropy = MAX_ANISO;
-scene.add(new THREE.Mesh(
+const sky = new THREE.Mesh(
   new THREE.SphereGeometry(80, 64, 40),
   new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, depthWrite: false })
-));
+);
+scene.add(sky);
 
 // 世界组:天体/轨迹/罗盘都在其中,旋转世界=壁纸的 applyRotation
 const world = new THREE.Group();
@@ -361,177 +362,66 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
-/* ==================== 视角(壁纸模式1:鼠标缓跟随 + 自旋) ==================== */
-let mx = 0, my = 0, cx = 0, cy = 0, cDown = false;
-addEventListener('pointermove', e => {
-  mx = Math.max(-1, Math.min(1, (e.clientX - innerWidth / 2) / (innerWidth / 2)));
-  my = Math.max(-1, Math.min(1, (e.clientY - innerHeight / 2) / (innerHeight / 2)));
-});
-addEventListener('pointerdown', () => { cDown = true; });
+/* ==================== 视角(壁纸模式0:仅按住拖拽,带惯性) ==================== */
+let cDown = false, lastPX = 0, lastPY = 0;
+let rotY = 0, rotX = 0, rotVelY = 0;
+addEventListener('pointerdown', e => { cDown = true; lastPX = e.clientX; lastPY = e.clientY; });
 addEventListener('pointerup', () => { cDown = false; });
+addEventListener('pointermove', e => {
+  if (!cDown) return;
+  rotVelY += (e.clientX - lastPX) / innerWidth * 10;   // 灵敏度(壁纸 senx=1 量级)
+  rotX += (e.clientY - lastPY) / innerHeight * 60;
+  rotX = Math.max(-30, Math.min(30, rotX));            // 壁纸:X轴限±30°
+  lastPX = e.clientX; lastPY = e.clientY;
+});
 
 /* ==================== HUD ==================== */
 const $ = id => document.getElementById(id);
-const elClock = $('hClock'), elDay = $('hDay'), elDate = $('hDate');
 const elLog = $('logBlock'), elEra = $('hEra'), elState = $('hState'), elTempV = $('hTempV');
 const elYears = $('hYears');
-const fills = [$('f1'), $('f2'), $('f3')];
 const hud = $('hud');
-const WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 let hudOn = false;
 function setHud(on) { hudOn = on; hud.classList.toggle('on', on); }
-$('clockBlock').addEventListener('click', () => setHud(!hudOn));
 
-function pad(n) { return n < 10 ? '0' + n : '' + n; }
-let lastClock = '';
-function updateClock() {
-  const t = new Date();
-  const c = pad(t.getHours()) + ':' + pad(t.getMinutes());
-  if (c !== lastClock) {
-    lastClock = c;
-    elClock.textContent = c;
-    elDay.textContent = WEEK[t.getDay()];
-    // 防作弊校验码(壁纸原样):kt=10→T / 牢笼关→T / 温度缩放7→D / 阈值默认组→D
-    elDate.textContent = t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()) + '/T/T/D/D';
-  }
-}
-function fillPct(d) {
-  const v = d > 10 ? 7.5 : d > 5 ? 5 + 0.5 * (d - 5) : d;
-  return Math.min(78, v * 10).toFixed(1) + '%';
-}
 let lastLogHtml = '', lastEra = '';
-const LOG_OPS = [0.30, 0.24, 0.16, 0.10, 0.07];
 function updateHud() {
   if (civ.era !== lastEra) { elEra.textContent = civ.era; lastEra = civ.era; }
   elState.textContent = 'State : ' + civ.state;
   elTempV.textContent = civ.temp.toFixed(2);
   elYears.textContent = civ.years.toFixed(2) + ' Years';
-  for (let i = 0; i < 3; i++) fills[i].style.width = fillPct(civ.d[i]);
   let html = '<div class="lg-head">' +
     (civ.alive ? '第' + civ.count + '号文明正在运行' : '文明无法生存') + '</div>' +
     '<div class="lg-sub">' +
     (civ.alive ? '文明已存活: ' + Math.max(0, Math.floor(civ.years) - civ.startYear) + '年'
                : '上个文明寿命: ' + civ.lastLife + '年') + '</div>';
-  for (let j = 0; j < civ.log.length; j++)
-    html += '<div style="opacity:' + LOG_OPS[j] + '">' + civ.log[j].txt + '</div>';
+  for (let j = 0; j < civ.log.length; j++) {
+    const op = Math.max(0.18, 0.85 - j * 0.07);
+    html += '<div style="opacity:' + op.toFixed(2) + '">' + civ.log[j].txt + '</div>';
+  }
   if (html !== lastLogHtml) { elLog.innerHTML = html; lastLogHtml = html; }
 }
 
-/* ==================== 音频(Melodysheep - Ether) + 波形 ==================== */
-const waveCv = $('wave');
-const waveCtx = waveCv.getContext('2d');
-let audio = null, analyser = null, audioData = null, audioOn = false;
-function initAudio() {
-  if (audio) return;
-  audio = new Audio('assets/wp/ether.flac');
-  audio.loop = true;
-  const ac = new (window.AudioContext || window.webkitAudioContext)();
-  const src = ac.createMediaElementSource(audio);
-  analyser = ac.createAnalyser();
-  analyser.fftSize = 512;
-  audioData = new Uint8Array(analyser.fftSize);
-  src.connect(analyser); analyser.connect(ac.destination);
-}
-function toggleAudio() {
-  initAudio();
-  if (audioOn) { audio.pause(); audioOn = false; }
-  else { audio.play().catch(() => {}); audioOn = true; }
-}
-$('audioBlock').addEventListener('click', () => { try { toggleAudio(); } catch (e) {} });
-function drawWave(runtime) {
-  const w = waveCv.width = waveCv.clientWidth * DPR;
-  const h = waveCv.height = waveCv.clientHeight * DPR;
-  waveCtx.clearRect(0, 0, w, h);
-  waveCtx.strokeStyle = 'rgba(142,166,200,0.65)';
-  waveCtx.lineWidth = 1 * DPR;
-  waveCtx.beginPath();
-  if (audioOn && analyser) {
-    analyser.getByteTimeDomainData(audioData);
-    const n = audioData.length;
-    for (let i = 0; i < n; i++) {
-      const x = i / (n - 1) * w;
-      const y = h / 2 + (audioData[i] - 128) / 128 * h * 0.46;
-      i === 0 ? waveCtx.moveTo(x, y) : waveCtx.lineTo(x, y);
-    }
-  } else {
-    // 静默时的微弱基线(壁纸无声时同样几乎平直)
-    for (let i = 0; i <= 100; i++) {
-      const x = i / 100 * w;
-      const y = h / 2 + Math.sin(i * 0.35 + runtime * 1.6) * h * 0.06
-                      + Math.sin(i * 0.11 - runtime * 0.7) * h * 0.03;
-      i === 0 ? waveCtx.moveTo(x, y) : waveCtx.lineTo(x, y);
-    }
-  }
-  waveCtx.stroke();
-}
-
-/* ==================== 开机/登录序列(壁纸 加载信息 组) ==================== */
+/* ==================== 系统启动/重启遮罩 ==================== */
 const boot = $('boot');
-const bootLines = $('bootLines'), bootIp = $('bootIp');
-const bootAcc = $('bootAcc'), bootPwd = $('bootPwd');
-const BOOT_TEXTS = [
-  '<1>.文明等级评估完成 / 宇宙摧毁已完成 / 文明档案已存档。',
-  '<2>.天体质量、位置、速度……加载完成 / 天体外观构建完成，天体初始化成功！',
-  '<3>.粒子生成完毕 / 引力构建成功/物理模拟测试通过！',
-  '<4>.文明种子提取完成/文明正在载入，宇宙加载中……'
-];
-const IP_TEXTS = [
-  '// M31:α-Cen-TR:3:4D12.8.10T15:30',
-  'Local/1st Arm/1S-8p System/Sol-3'
-];
+const bootStatus = $('bootStatus');
 const spinnerEl = $('bootSpinner');
 let spinDeg = 0, spinTick = 0;
-// 打字机由渲染循环驱动(setInterval 在后台/无头环境会被节流)
-let bootSeq = null;   // {script, k, acc, hold, done}
-function runBootSequence(done) {
+let bootSeq = null;   // {hold, done} 渲染循环驱动(定时器会被后台节流)
+function runBootSequence(text, seconds, done) {
+  bootStatus.textContent = text;
   boot.classList.remove('gone');
-  boot.classList.add('seq');
-  bootLines.textContent = ''; bootIp.textContent = '';
-  bootAcc.textContent = ''; bootPwd.textContent = '';
-  const t = new Date();
-  const dateStr = t.getFullYear() + '/' + t.getMonth() + '/' + t.getDate();
-  // 打字脚本:账号→密码→四行构建日志→坐标
-  const script = [];
-  for (const ch of '哥白尼') script.push(() => bootAcc.textContent += ch);
-  for (const ch of '* * * * * * * *') script.push(() => bootPwd.textContent += ch);
-  BOOT_TEXTS.forEach((line, li) => {
-    for (const ch of line) script.push(() => {
-      const parts = bootLines.textContent.split('\n');
-      while (parts.length <= li) parts.push('');
-      parts[li] += ch;
-      bootLines.textContent = parts.join('\n');
-    });
-  });
-  IP_TEXTS.concat([dateStr]).forEach((line, li) => {
-    for (const ch of line) script.push(() => {
-      const parts = bootIp.textContent.split('\n');
-      while (parts.length <= li) parts.push('');
-      parts[li] += ch;
-      bootIp.textContent = parts.join('\n');
-    });
-  });
-  bootSeq = { script, k: 0, acc: 0, hold: 0, done };
+  bootSeq = { hold: 0, secs: seconds, done };
 }
 function bootAdvance(dt) {
   if (!bootSeq) return;
-  const s = bootSeq;
-  if (s.k < s.script.length) {
-    s.acc += dt * 200;                 // ≈200字符/秒
-    while (s.acc >= 1 && s.k < s.script.length) { s.script[s.k++](); s.acc -= 1; }
-  } else {
-    s.hold += dt;
-    if (s.hold >= 0.9) {
-      boot.classList.add('gone');
-      const cb = s.done;
-      bootSeq = null;
-      if (cb) cb();
-    }
+  bootSeq.hold += dt;
+  if (bootSeq.hold >= bootSeq.secs) {
+    boot.classList.add('gone');
+    const cb = bootSeq.done;
+    bootSeq = null;
+    if (cb) cb();
   }
 }
-$('bootPower').addEventListener('click', () => {
-  try { toggleAudio(); } catch (e) {}  // 开机即播 Ether(用户手势内,浏览器放行)
-  runBootSequence(() => setHud(true));
-});
 
 /* ==================== 逃逸重启(壁纸:tj→延时120帧→重启) ==================== */
 let numSeq = 0;        // >0 = 重启序列进行中(帧计)
@@ -560,14 +450,14 @@ function frame() {
 
   const com = computeCOM();
 
-  // 逃逸检测 → 重启序列(120帧≈2s 时换宇宙,同时放开机动画)
+  // 逃逸检测 → 重启序列(120帧≈2s 时换宇宙,遮罩显示"系统重启中")
   checkEscape();
   if (numSeq > 0) {
     numSeq += dt * 60;
     if (numSeq >= 120 && numSeq - dt * 60 < 120) {
       civEscaped = true;
       resetSystem();
-      runBootSequence(() => {});
+      runBootSequence('系统重启中', 2.6, null);
     }
     if (numSeq > 400) numSeq = 0;
   }
@@ -581,14 +471,13 @@ function frame() {
   // 文明纪年
   civAdvance(dt, runT);
 
-  // 视角:鼠标缓跟随(lenV=0.1) + 3°/s 自旋;世界旋转,天空静止
-  const kf = Math.min(3, dt * 60);
-  cx += 0.1 * (mx - cx) * kf;
-  cy += 0.1 * (my - cy) * kf;
-  const rotY = cx * 90 + runT * 3;      // lenAX=90 + zizhuanY=3
-  const rotX = Math.max(-30, Math.min(30, -cy * 17));  // lenAY=17
+  // 视角:仅拖拽改变(带惯性,壁纸模式0);世界旋转,天空缓慢自转
+  rotY += rotVelY;
+  if (!cDown) rotVelY *= 0.985;         // 壁纸阻尼
+  if (Math.abs(rotVelY) < 0.001) rotVelY = 0;
   world.rotation.y = rotY * Math.PI / 180;
   world.rotation.x = (6 + rotX) * Math.PI / 180;
+  sky.rotation.y += dt * 0.0022;
 
   // 天体位置(质心系)
   for (let i = 0; i < 3; i++) {
@@ -636,9 +525,10 @@ function frame() {
   }
 
   // HUD
-  updateClock();
-  if (hudOn) { updateHud(); drawWave(runT); }
+  if (hudOn) updateHud();
 
   composer.render();
 }
+// 首次进入:系统启动中
+runBootSequence('系统启动中', 2.8, () => setHud(true));
 frame();
