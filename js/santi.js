@@ -270,46 +270,89 @@ const planetG = new THREE.Group();
 const planetBall = new THREE.Mesh(new THREE.SphereGeometry(0.01, 16, 12), earthMat);
 planetG.add(planetBall);
 world.add(planetG);
-// OL 标注套件(scene.json objects[95-111] 解码:圈+引线贴图 OL.png,实时坐标文本,
-// 位置标签 datacolor 淡蓝;三星 尺寸400×0.003=1.2,行星 400×0.002=0.8;深度测试可被星体遮挡)
+// OL 标注套件(scene.json objects[95-111] 完整解码):
+// · 圈+引线贴图 OL.png(400×400 纯白线稿:圆环 91px 居画布正中心,折线引线至右上,
+//   横线 y≈132 一直到画布右缘)→ 锚点即中心(0.5,0.5),不染色;
+//   四边形世界尺寸 = 400px×scale:三星 0.003→1.2,行星 0.002→0.8
+// · 两个独立文本层(systemfont_arial,pointsize 32,水平/垂直居中):
+//   坐标行 白色,origin=天体+(0.4,0.24)[星]/(0.26,0.18)[行星],内容 "[x,y,z]"(toFixed(2),z 含 gjz=-9)
+//   标签行 datacolor #97C3FF,origin=+(0.4,0.17)/(0.26,0.11) → 横线正好夹在两行文本之间
+//   字高 em = pointsize×scale×K,K=2.875 为唯一经验换算系数(标定自作者工坊截图
+//   1600×900:两行间距 0.07 世界单位=16px ⇒ em=6.3px=0.0276 → 星 0.0368/行星 0.0276)
+// · 显隐 = 悬停交互(纯色 depthtest 命中层 cursorEnter/Leave 解码):鼠标进入该天体
+//   OL 四边形范围 → alpha 以 0.04×k(k=1000·ft/30)步进升至 0.5,移出后降回 0;
+//   engine.runtime<5s 强制 0,runtime<3s 不淡出;dd(菜单开关)用户配置 menuinit=false
+//   → 行星强显分支永不触发,四体均为悬停显示
+// · 偏移叠加在旋转后的 xxN 上(屏幕对齐)→ 套件放静止组,每帧用世界旋转后的坐标驱动
 const OL_TEX = texLoader.load('assets/wp/ui/OL.png');
 const OL_LABELS = ['L/1st-Arm/3S-S1', 'L/1st-Arm/3S-S2', 'L/1st-Arm/3S-S3', 'L/1st-Arm/3S:1P'];
+const OL_K = 2.875, OL_TAN = Math.tan(25 * Math.PI / 180);
+const olGroup = new THREE.Group();
+olGroup.position.z = -9;               // 与 world 同平面,但不随拖拽/自旋旋转
+scene.add(olGroup);
+let olMouseX = -1e5, olMouseY = -1e5;
+function olTextSprite(color, emWorld) {
+  const cv = document.createElement('canvas');
+  cv.width = 1280; cv.height = 144;    // 96px 字高画布,1.5 倍留行高
+  const c2 = cv.getContext('2d');
+  c2.font = '96px Arial';
+  c2.textAlign = 'center'; c2.textBaseline = 'middle';
+  c2.fillStyle = color;
+  const tex = new THREE.CanvasTexture(cv);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, transparent: true, opacity: 0, depthWrite: false
+  }));
+  const h = emWorld * 144 / 96;        // 画布高→世界高
+  spr.scale.set(h * 1280 / 144, h, 1);
+  return { spr, cv, c2, tex };
+}
 const olKits = [];
 for (let i = 0; i < 4; i++) {
-  const s = i < 3 ? 1.2 : 0.8;
-  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: OL_TEX, color: 0x97c3ff, transparent: true, opacity: 0.8, depthWrite: false
+  const star = i < 3;
+  const quad = star ? 1.2 : 0.8;
+  const em = 32 * (star ? 0.0004 : 0.0003) * OL_K;
+  const ring = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: OL_TEX, transparent: true, opacity: 0, depthWrite: false
   }));
-  spr.scale.set(s, s, 1);
-  spr.center.set(0.22, 0.82);          // OL.png 圆心锚定天体
-  world.add(spr);
-  const cv = document.createElement('canvas');
-  cv.width = 512; cv.height = 128;
-  const c2 = cv.getContext('2d');
-  const tex = new THREE.CanvasTexture(cv);
-  const txt = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: tex, transparent: true, depthWrite: false
-  }));
-  txt.scale.set(1.5, 0.375, 1);
-  txt.center.set(0, 0.5);              // 左中锚点,接引线末端
-  world.add(txt);
-  olKits.push({ spr, txt, cv, c2, tex, s, label: OL_LABELS[i], lastDraw: 0 });
+  ring.scale.set(quad, quad, 1);
+  const coord = olTextSprite('#ffffff', em);
+  const label = olTextSprite('#97c3ff', em);
+  label.c2.fillText(OL_LABELS[i], 640, 72);   // 标签静态,画一次
+  label.tex.needsUpdate = true;
+  olGroup.add(ring, coord.spr, label.spr);
+  olKits.push({
+    ring, coord, label, a: 0, lastDraw: 0, half: quad / 2,
+    offCx: star ? 0.4 : 0.26, offCy: star ? 0.24 : 0.18,
+    offLx: star ? 0.4 : 0.26, offLy: star ? 0.17 : 0.11
+  });
 }
-function updateOL(i, x, y, z, now) {
+window.__ol = olKits;                  // 调试句柄(无头验收用,不影响渲染)
+const _olP = new THREE.Vector3(), _olV = new THREE.Vector3();
+function updateOL(i, x, y, z, dt, now) {
   const k = olKits[i];
-  k.spr.position.set(x, y, z);
-  k.txt.position.set(x + 0.80 * k.s, y + 0.20 * k.s, z);
-  if (now - k.lastDraw > 150) {
+  // 悬停检测:天体投影到屏幕,命中区=OL 四边形(±half 世界单位,按视深折算像素)
+  _olP.set(x, y, z - 9).project(camera);
+  const sx = (_olP.x + 1) / 2 * innerWidth, sy = (1 - _olP.y) / 2 * innerHeight;
+  const halfPx = k.half * (innerHeight / 2) / (OL_TAN * (15 - z));
+  k.sx = sx; k.sy = sy; k.halfPx = halfPx;    // 调试句柄(无头验收用)
+  const hover = Math.abs(olMouseX - sx) <= halfPx && Math.abs(olMouseY - sy) <= halfPx;
+  // alpha 脚本原式:step=0.04×k,k=1000·ft/30;<5s 强制 0;<3s 不淡出
+  const step = 0.04 * 1000 * dt / 30;
+  if (runT < 5) k.a = 0;
+  else if (hover) k.a = Math.min(k.a + step, 0.5);
+  else if (runT > 3) k.a = Math.max(k.a - step, 0);
+  k.ring.material.opacity = k.a;
+  k.coord.spr.material.opacity = k.a;
+  k.label.spr.material.opacity = k.a;
+  k.ring.position.set(x, y, z);
+  k.coord.spr.position.set(x + k.offCx, y + k.offCy, z);
+  k.label.spr.position.set(x + k.offLx, y + k.offLy, z);
+  if (k.a > 0 && now - k.lastDraw > 150) {
     k.lastDraw = now;
-    const c2 = k.c2;
-    c2.clearRect(0, 0, 512, 128);
-    c2.fillStyle = 'rgba(151,195,255,0.9)';
-    c2.font = '44px Rajdhani, Consolas, monospace';
-    c2.fillText('[' + x.toFixed(2) + ', ' + y.toFixed(2) + ', ' + z.toFixed(2) + ']', 6, 48);
-    c2.font = '40px Rajdhani, Consolas, monospace';
-    c2.fillStyle = 'rgba(151,195,255,0.7)';
-    c2.fillText(k.label, 6, 104);
-    k.tex.needsUpdate = true;
+    const c2 = k.coord.c2;
+    c2.clearRect(0, 0, 1280, 144);
+    c2.fillText('[' + x.toFixed(2) + ',' + y.toFixed(2) + ',' + (z - 9).toFixed(2) + ']', 640, 72);
+    k.coord.tex.needsUpdate = true;
   }
 }
 
@@ -603,7 +646,12 @@ let cDown = false, lastPX = 0, lastPY = 0;
 let rotY = 0, rotX = 0, rotVelY = 0, recenter = false;
 addEventListener('pointerdown', e => { cDown = true; recenter = false; lastPX = e.clientX; lastPY = e.clientY; });
 addEventListener('pointerup', () => { cDown = false; });
+addEventListener('pointerout', e => {          // 鼠标离开窗口 = cursorLeave
+  if (!e.relatedTarget) { olMouseX = -1e5; olMouseY = -1e5; }
+});
+addEventListener('blur', () => { olMouseX = -1e5; olMouseY = -1e5; });
 addEventListener('pointermove', e => {
+  olMouseX = e.clientX; olMouseY = e.clientY;
   if (!cDown) return;
   rotVelY += (e.clientX - lastPX) / innerWidth * 10;   // 灵敏度(壁纸 senx=1 量级)
   rotX += (e.clientY - lastPY) / innerHeight * 60;
@@ -766,9 +814,11 @@ function frame() {
     geo.attributes.aT.needsUpdate = true;
   }
 
-  // OL 标注跟随(实时坐标 = 质心系位置)
-  for (let i = 0; i < 4; i++)
-    updateOL(i, B[i].x - com.x, B[i].y - com.y, B[i].z - com.z, now);
+  // OL 标注(引擎语义:xxN=世界旋转后的质心系坐标,文本偏移屏幕对齐,显示 z 含 gjz=-9)
+  for (let i = 0; i < 4; i++) {
+    _olV.set(B[i].x - com.x, B[i].y - com.y, B[i].z - com.z).applyEuler(world.rotation);
+    updateOL(i, _olV.x, _olV.y, _olV.z, dt, now);
+  }
 
   // 罗盘:按住浮现
   compassA += ((cDown ? 1 : 0) - compassA) * Math.min(1, dt * 5);
