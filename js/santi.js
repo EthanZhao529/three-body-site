@@ -2,8 +2,9 @@
    三体实时演算 · Wallpaper Engine 壁纸 1:1 浏览器复刻
    物理/文明/界面逻辑全部移植自壁纸 scene.pkg 内嵌脚本(SYKM);
    参数取用户机器 project.json 与录屏一致的组合:
-   随机初始 ±1/±0.05 · G=1.3275e-8 · 步长7.5e-4×每帧≤10步 ·
-   逃逸DD=6→延时2s重启 · 引力牢笼关(录屏/T/T/D/D) · kt=10
+   随机初始 ±1/±0.05(xcxc=2/vcvc=0.1) · G=1.3275e-8 · 步长7.5e-4×每帧≤10步 ·
+   逃逸DD=6→延时2s重启 · kt=10 ·
+   镜头调度 gjz:0s起8s easeOutQuart 50→0(用户distance=0),稳态观距≈6
    ============================================================ */
 import * as THREE from 'three';
 import { EffectComposer } from './vendor/jsm/postprocessing/EffectComposer.js';
@@ -207,11 +208,17 @@ sky.rotation.y = -2.35619;
 scene.add(sky);
 
 // 世界组:天体/轨迹/罗盘都在其中,旋转世界=壁纸的 applyRotation;
-// 引擎解码:渲染 z 偏移 gjz=-9(先绕质心旋转再平移),相机 z=6 → 实际观距 15
+// ⭐镜头调度(objects[22] 解码):shared.gjz 每帧被该脚本覆盖——
+//   startTime=0,duration=8s,easeOutQuart,startValue=50 → endValue=用户distance=0
+//   即启动时天体从 z=50(相机后方)冲入镜头,8 秒内缓动落定 z≈0,稳态观距≈6;
+//   引擎里 gjz=-9 只是"未定义时兜底",运行时恒被镜头调度接管(此前钉死-9是误读)
 const world = new THREE.Group();
 world.rotation.order = 'YXZ';
-world.position.z = -9;
 scene.add(world);
+function gjzNow() {
+  return runT >= 8 ? 0 : 50 * Math.pow(1 - runT / 8, 4);
+}
+let curGJZ = 50;
 
 function glowTexture() {
   const s = 256, cv = document.createElement('canvas');
@@ -241,9 +248,9 @@ const glowSoft = glowTexture();
 //   星2 (1,.6,.6)·0.85+(1,.733,.608)·2 = (2.85, 1.98, 1.73)
 //   星3 (1,.494,.431)·1+(1,.514,.373)·2 = (3.00, 1.52, 1.18)
 const SUNS = [
-  { hdr: [2.00, 2.00, 2.00], r: 0.215, flareScale: 2.00 },   // 半径=7.2×hNz
-  { hdr: [2.85, 1.98, 1.73], r: 0.165, flareScale: 1.53 },   // sa3 尺寸=512×0.13×hNz
-  { hdr: [3.00, 1.52, 1.18], r: 0.115, flareScale: 1.07 }
+  { hdr: [2.00, 2.00, 2.00], r: 0.0867, flareScale: 0.80 },   // 半径=2.89×hNz(观距6下
+  { hdr: [2.85, 1.98, 1.73], r: 0.0665, flareScale: 0.61 },   // 与桌面星盘3.1vh锚定;
+  { hdr: [3.00, 1.52, 1.18], r: 0.0462, flareScale: 0.43 }    // 旧值0.215等是错按观距15标的)
 ];
 const SA3_TINT = 0xffcbb1;   // 三星同色 _16/_24/_33 = (1,0.796,0.694)
 const suns = [];
@@ -263,7 +270,7 @@ for (let i = 0; i < 3; i++) {
   world.add(g);
   suns.push({ group: g, core, flare });
 }
-// 行星(球体04/0dq 解码:x1z=0.01 → 世界半径 0.25×(0.01/0.03)≈0.083;
+// 行星(球体04 解码:单位球 × scale 脚本=x1z 滑条 0.01 → 世界半径 0.01 真值;
 // 发光色随温度冻蓝↔灼红=材质 emissive 脚本原样;无光晕精灵,辉光交给泛光)
 const earthMat = new THREE.MeshBasicMaterial({ map: texLoader.load('assets/wp/earth.jpg') });
 const planetG = new THREE.Group();
@@ -275,7 +282,7 @@ world.add(planetG);
 //   横线 y≈132 一直到画布右缘)→ 锚点即中心(0.5,0.5),不染色;
 //   四边形世界尺寸 = 400px×scale:三星 0.003→1.2,行星 0.002→0.8
 // · 两个独立文本层(systemfont_arial,pointsize 32,水平/垂直居中):
-//   坐标行 白色,origin=天体+(0.4,0.24)[星]/(0.26,0.18)[行星],内容 "[x,y,z]"(toFixed(2),z 含 gjz=-9)
+//   坐标行 白色,origin=天体+(0.4,0.24)[星]/(0.26,0.18)[行星],内容 "[x,y,z]"(toFixed(2),z 含动态 gjz)
 //   标签行 datacolor #97C3FF,origin=+(0.4,0.17)/(0.26,0.11) → 横线正好夹在两行文本之间
 //   字高 em = pointsize×scale×K,K=2.875 为唯一经验换算系数(标定自作者工坊截图
 //   1600×900:两行间距 0.07 世界单位=16px ⇒ em=6.3px=0.0276 → 星 0.0368/行星 0.0276)
@@ -287,8 +294,7 @@ world.add(planetG);
 const OL_TEX = texLoader.load('assets/wp/ui/OL.png');
 const OL_LABELS = ['L/1st-Arm/3S-S1', 'L/1st-Arm/3S-S2', 'L/1st-Arm/3S-S3', 'L/1st-Arm/3S:1P'];
 const OL_K = 2.875, OL_TAN = Math.tan(25 * Math.PI / 180);
-const olGroup = new THREE.Group();
-olGroup.position.z = -9;               // 与 world 同平面,但不随拖拽/自旋旋转
+const olGroup = new THREE.Group();     // 与 world 同 z(每帧=gjz),但不随拖拽/自旋旋转
 scene.add(olGroup);
 let olMouseX = -1e5, olMouseY = -1e5;
 function olTextSprite(color, emWorld) {
@@ -331,9 +337,9 @@ const _olP = new THREE.Vector3(), _olV = new THREE.Vector3();
 function updateOL(i, x, y, z, dt, now) {
   const k = olKits[i];
   // 悬停检测:天体投影到屏幕,命中区=OL 四边形(±half 世界单位,按视深折算像素)
-  _olP.set(x, y, z - 9).project(camera);
+  _olP.set(x, y, z + curGJZ).project(camera);
   const sx = (_olP.x + 1) / 2 * innerWidth, sy = (1 - _olP.y) / 2 * innerHeight;
-  const halfPx = k.half * (innerHeight / 2) / (OL_TAN * (15 - z));
+  const halfPx = k.half * (innerHeight / 2) / (OL_TAN * (6 - z - curGJZ));
   k.sx = sx; k.sy = sy; k.halfPx = halfPx;    // 调试句柄(无头验收用)
   const hover = Math.abs(olMouseX - sx) <= halfPx && Math.abs(olMouseY - sy) <= halfPx;
   // alpha 脚本原式:step=0.04×k,k=1000·ft/30;<5s 强制 0;<3s 不淡出
@@ -351,7 +357,7 @@ function updateOL(i, x, y, z, dt, now) {
     k.lastDraw = now;
     const c2 = k.coord.c2;
     c2.clearRect(0, 0, 1280, 144);
-    c2.fillText('[' + x.toFixed(2) + ',' + y.toFixed(2) + ',' + (z - 9).toFixed(2) + ']', 640, 72);
+    c2.fillText('[' + x.toFixed(2) + ',' + y.toFixed(2) + ',' + (z + curGJZ).toFixed(2) + ']', 640, 72);
     k.coord.tex.needsUpdate = true;
   }
 }
@@ -471,16 +477,16 @@ const compass = new THREE.Group();
     const m = new THREE.LineBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false });
     return new THREE.Line(geo, m);
   };
-  compass.add(mkRing(5.0, 128, 0x4a6a94, 0.6));           // 赤道环(随观距15等比放大)
+  compass.add(mkRing(2.0, 128, 0x4a6a94, 0.6));           // 赤道环(角尺寸不变,按观距6缩回)
   const yAxis = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, -5.75, 0), new THREE.Vector3(0, 5.75, 0)
+    new THREE.Vector3(0, -2.3, 0), new THREE.Vector3(0, 2.3, 0)
   ]);
   compass.add(new THREE.Line(yAxis, new THREE.LineBasicMaterial({
     color: 0x28496f, transparent: true, opacity: 0.3, depthWrite: false
   })));
   // 刻度
   for (let i = 0; i < 24; i++) {
-    const a = i / 24 * Math.PI * 2, r1 = 5.0, r2 = i % 6 === 0 ? 5.3 : 5.15;
+    const a = i / 24 * Math.PI * 2, r1 = 2.0, r2 = i % 6 === 0 ? 2.12 : 2.06;
     const t = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(Math.cos(a) * r1, 0, Math.sin(a) * r1),
       new THREE.Vector3(Math.cos(a) * r2, 0, Math.sin(a) * r2)
@@ -779,6 +785,11 @@ function frame() {
   world.rotation.y = rotY * Math.PI / 180;
   world.rotation.x = (6 + rotX) * Math.PI / 180;
 
+  // 镜头调度:gjz 每帧驱动世界深度(启动 8s 由 50 冲入,稳态 0 → 观距≈6)
+  curGJZ = gjzNow();
+  world.position.z = curGJZ;
+  olGroup.position.z = curGJZ;
+
   // 尘埃漂移(壁纸 speed=0.61 量级) + 后处理时间
   advanceDust(dt);
   grainPass.uniforms.uTime.value = runT;
@@ -814,7 +825,7 @@ function frame() {
     geo.attributes.aT.needsUpdate = true;
   }
 
-  // OL 标注(引擎语义:xxN=世界旋转后的质心系坐标,文本偏移屏幕对齐,显示 z 含 gjz=-9)
+  // OL 标注(引擎语义:xxN=世界旋转后的质心系坐标,文本偏移屏幕对齐,显示 z 含动态 gjz)
   for (let i = 0; i < 4; i++) {
     _olV.set(B[i].x - com.x, B[i].y - com.y, B[i].z - com.z).applyEuler(world.rotation);
     updateOL(i, _olV.x, _olV.y, _olV.z, dt, now);
