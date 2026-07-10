@@ -3,7 +3,7 @@
    物理/文明/界面逻辑全部移植自壁纸 scene.pkg 内嵌脚本(SYKM);
    参数取用户机器 project.json 与录屏一致的组合:
    随机初始 ±1/±0.05(xcxc=2/vcvc=0.1) · G=1.3275e-8 · 步长7.5e-4×每帧≤10步 ·
-   逃逸DD=6→延时2s重启 · kt=10 ·
+   逃逸DD=6→延时2s重启 · 引力牢笼开(软,Mc=1.5e7/k2=0.5/rc=0.2/n=2) · kt=10 ·
    镜头调度 gjz:0s起8s easeOutQuart 50→0(用户distance=0),稳态观距≈6
    ============================================================ */
 import * as THREE from 'three';
@@ -63,14 +63,40 @@ function accOn(i) {
   }
   return [ax, ay, az];
 }
+// 引力牢笼(computeConstraintAcceleration 软牢笼分支逐行恢复;用户实机配置:
+// constraint_En=true·hardConstraint=false,Mc=1.5e7 k1=0 re=0.1 k2=0.5 rc=0.2 n=2)
+// r≤re:防坍缩项 -k1·G·M·(1-(r/re)²)²(k1=0 恒零);re<r≤rc:中性区无力;
+// r>rc:a = k2·G·Mc·(r−rc)^n 指向质心,四体一视同仁 —— 壁纸自己的抗弹弓机制
+const CAGE = { M: 1.5e7, k1: 0, re: 0.1, k2: 0.5, rc: 0.2, n: 2 };
+function cageAcc(i, com) {
+  const dx = B[i].x - com.x, dy = B[i].y - com.y, dz = B[i].z - com.z;
+  const r = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  let mag;
+  if (r <= CAGE.re) {
+    const ratio = r / CAGE.re;
+    mag = -CAGE.k1 * G * CAGE.M * Math.pow(1 - ratio * ratio, 2);
+  } else if (r > CAGE.rc) {
+    mag = CAGE.k2 * G * CAGE.M * Math.pow(r - CAGE.rc, CAGE.n);
+  } else {
+    return null;
+  }
+  const inv = 1 / Math.max(r, 1e-9);          // mag×(指向质心的单位向量)
+  return [-mag * dx * inv, -mag * dy * inv, -mag * dz * inv];
+}
 function drift(c) {
   for (let i = 0; i < 4; i++) {
     B[i].x += c * TS * B[i].vx; B[i].y += c * TS * B[i].vy; B[i].z += c * TS * B[i].vz;
   }
 }
 function kick(d) {
+  const com = computeCOM();                   // 引擎:每个 kick 阶段前重算质心
   const acc = [];
-  for (let i = 0; i < 4; i++) acc.push(accOn(i));
+  for (let i = 0; i < 4; i++) {
+    const a = accOn(i);
+    const c = cageAcc(i, com);
+    if (c) { a[0] += c[0]; a[1] += c[1]; a[2] += c[2]; }
+    acc.push(a);
+  }
   for (let i = 0; i < 4; i++) {
     B[i].vx += d * TS * acc[i][0]; B[i].vy += d * TS * acc[i][1]; B[i].vz += d * TS * acc[i][2];
   }
