@@ -231,26 +231,25 @@ function glowTexture() {
   x.fillStyle = g; x.fillRect(0, 0, s, s);
   return new THREE.CanvasTexture(cv);
 }
-const sunMap = texLoader.load('assets/wp/sun.webp');   // 0aun:三星材质共用的真·日面
+// 0aun 日面 × 米粒组织 mask(Material__50_mask alpha 通道,三星共用同一张,
+// 均值0.843/范围0.44-1.0,同UV → 离线烘焙相乘;随 angles 随机游走呈"沸腾"质感)
+const sunMap = texLoader.load('assets/wp/sun_em.webp');
 sunMap.colorSpace = THREE.NoColorSpace;
 sunMap.anisotropy = MAX_ANISO;
 const flareMap = texLoader.load('assets/wp/flare.png');
 const glowSoft = glowTexture();
 
-// 三星(材质 json 推导,零手调):
-// 染色 = color×brightness + emissive×emissivebrightness 归一
-//   星1 (1,1,1)·1+(1,1,1)·1 → #FFFFFF
-//   星2 (1,.6,.6)·0.85+(1,.733,.608)·2 → #FFB19B
-//   星3 (1,.494,.431)·1+(1,.514,.373)·2 → #FF8164
-// 尺寸:h1z/h2z/h3z=0.03/0.023/0.016,世界半径 0.25/0.192/0.133(桌面视占比核验)
-// HDR 双通道(材质json原式,不归一):tex×color×brightness + tex×emissive×emissivebrightness
-//   星1 (1,1,1)·1+(1,1,1)·1        = (2.00, 2.00, 2.00)
-//   星2 (1,.6,.6)·0.85+(1,.733,.608)·2 = (2.85, 1.98, 1.73)
-//   星3 (1,.494,.431)·1+(1,.514,.373)·2 = (3.00, 1.52, 1.18)
+// 三星材质(Material__50.json 纯解码,审计第1条修正):
+// generic4 双通道 = 受光albedo(color×brightness) + 自发光(emissive×emissivebrightness);
+// 场景无任何光源且 ambientcolor=(0,0,0) → 受光通道输出≈0,盘面只剩自发光:
+//   星1 (1,1,1)×1        = (1.00, 1.00, 1.00)
+//   星2 (1,.73333,.60784)×2 = (2.00, 1.4667, 1.2157)
+//   星3 (1,.51373,.37255)×2 = (2.00, 1.0275, 0.7451)
+// (此前把两通道相加得 2.0/2.85/3.0 是错的——albedo 通道在无光场景是死通道)
 const SUNS = [
-  { hdr: [2.00, 2.00, 2.00], r: 0.0867, flareScale: 0.80 },   // 半径=2.89×hNz(观距6下
-  { hdr: [2.85, 1.98, 1.73], r: 0.0665, flareScale: 0.61 },   // 与桌面星盘3.1vh锚定;
-  { hdr: [3.00, 1.52, 1.18], r: 0.0462, flareScale: 0.43 }    // 旧值0.215等是错按观距15标的)
+  { hdr: [1.00, 1.0000, 1.0000], r: 0.0867, flareScale: 0.80 },   // 半径=2.89×hNz(观距6下
+  { hdr: [2.00, 1.4667, 1.2157], r: 0.0665, flareScale: 0.61 },   // 与桌面星盘3.1vh锚定)
+  { hdr: [2.00, 1.0275, 0.7451], r: 0.0462, flareScale: 0.43 }
 ];
 const SA3_TINT = 0xffcbb1;   // 三星同色 _16/_24/_33 = (1,0.796,0.694)
 const suns = [];
@@ -807,7 +806,7 @@ function frame() {
   planetBall.rotation.x -= kTumble * Math.random();
   const tmp = new THREE.Color();
   planetTint(civ.temp, tmp);
-  earthMat.color.copy(tmp).multiplyScalar(2.2);   // 行星材质 brightness=3 的 HDR 亮度(泛光发光点)
+  earthMat.color.copy(tmp);   // 行星=纯自发光×1(brightness=3 属受光死通道;此前×2.2 为手调已纠)
 
   // 轨迹缓冲(点精灵:位置 + 线性比例 aT,尺寸/透明度在 shader 内按原式插值)
   for (let i = 0; i < 4; i++) {
