@@ -3,7 +3,9 @@
    物理/文明/界面逻辑全部移植自壁纸 scene.pkg 内嵌脚本(SYKM);
    参数取用户机器 project.json 与录屏一致的组合:
    随机初始 ±1/±0.05(xcxc=2/vcvc=0.1) · G=1.3275e-8 · 步长7.5e-4×每帧≤10步 ·
-   逃逸DD=6→延时2s重启 · 引力牢笼开(软,Mc=1.5e7/k2=0.5/rc=0.2/n=2) · kt=10 ·
+   逃逸DD=6→延时2s重启 · kt=10 ·
+   ⭐用户定制三项(2026-07-12):类等边三角形开局 · 牢笼减弱 k2=0.07(实机0.5) ·
+   时间流速 ktime=0.3(实机1) ·
    镜头调度 gjz:0s起8s easeOutQuart 50→0(用户distance=0),稳态观距≈6
    ============================================================ */
 import * as THREE from 'three';
@@ -19,6 +21,9 @@ const G = 6.6743e-11 * (1e30 / 5e6) * Math.pow(3.1536e7, 2) / Math.pow(1e12, 3);
 const MASS = [5e6, 5e6, 5e6, 5000];
 const TS = 0.75 / 1000;          // 固定物理步长
 const MAX_STEPS = 10;            // 每帧步数上限(壁纸防螺旋死亡)
+// ⭐用户定制(2026-07-12 拍板,偏离实机 ktime=1):时间流速放慢——
+// 壁纸 timespeed 旋钮语义,物理推进与文明纪年同乘(60fps 下 0.45→0.3 单位/秒)
+const KTIME = 0.3;
 const RAS = 0.1, KSOFT = 2.8, KRAS = KSOFT * RAS;
 const A_BETA = 3 / (KSOFT - 1), A_ALPHA = 1 - A_BETA;
 const DD = 6;                    // 逃逸阈值(对质心)
@@ -30,14 +35,34 @@ const Yc1 = Yw1 / 2, Yc2 = (Yw0 + Yw1) / 2, Yc3 = Yc2, Yc4 = Yc1;
 const Yd1 = Yw1, Yd2 = Yw0, Yd3 = Yw1;
 
 let B = [];                      // 四体:三星 + 行星
+// ⭐用户定制开局(2026-07-12 拍板,替换实机 xcxc=2 的立方体均匀随机):
+// 三星=随机取向平面上的类等边三角形(外接圆半径 0.85~1.15,顶点抖动±0.15),
+// 行星落在三角形中心附近(±0.15);初速度维持 vcvc=0.1(±0.05)。
+// 作者源码里本有等边三角形开局被注释弃用("可惜了,三角形多好看啊,为了eto妥协了^-^")
 function resetSystem() {
   B = [];
-  for (let i = 0; i < 4; i++) {
+  const th = Math.acos(Math.random() * 2 - 1), ph = Math.random() * Math.PI * 2;
+  const n = [Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph)];
+  let u = [-n[1], n[0], 0];
+  const ul = Math.hypot(u[0], u[1], u[2]);
+  if (ul < 1e-6) u = [1, 0, 0]; else u = [u[0] / ul, u[1] / ul, u[2] / ul];
+  const w = [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]];
+  const R = 0.85 + Math.random() * 0.3;
+  const phase = Math.random() * Math.PI * 2;
+  for (let k = 0; k < 3; k++) {
+    const a = phase + k * 2 * Math.PI / 3;
+    const c = Math.cos(a) * R, s = Math.sin(a) * R;
     B.push({
-      x: (Math.random() - 0.5) * XC, y: (Math.random() - 0.5) * XC, z: (Math.random() - 0.5) * XC,
+      x: c * u[0] + s * w[0] + (Math.random() - 0.5) * 0.3,
+      y: c * u[1] + s * w[1] + (Math.random() - 0.5) * 0.3,
+      z: c * u[2] + s * w[2] + (Math.random() - 0.5) * 0.3,
       vx: (Math.random() - 0.5) * VC, vy: (Math.random() - 0.5) * VC, vz: (Math.random() - 0.5) * VC
     });
   }
+  B.push({
+    x: (Math.random() - 0.5) * 0.3, y: (Math.random() - 0.5) * 0.3, z: (Math.random() - 0.5) * 0.3,
+    vx: (Math.random() - 0.5) * VC, vy: (Math.random() - 0.5) * VC, vz: (Math.random() - 0.5) * VC
+  });
   for (let i = 0; i < 4; i++) trailsData[i].length = 0;
 }
 function computeCOM() {
@@ -63,11 +88,12 @@ function accOn(i) {
   }
   return [ax, ay, az];
 }
-// 引力牢笼(computeConstraintAcceleration 软牢笼分支逐行恢复;用户实机配置:
-// constraint_En=true·hardConstraint=false,Mc=1.5e7 k1=0 re=0.1 k2=0.5 rc=0.2 n=2)
-// r≤re:防坍缩项 -k1·G·M·(1-(r/re)²)²(k1=0 恒零);re<r≤rc:中性区无力;
-// r>rc:a = k2·G·Mc·(r−rc)^n 指向质心,四体一视同仁 —— 壁纸自己的抗弹弓机制
-const CAGE = { M: 1.5e7, k1: 0, re: 0.1, k2: 0.5, rc: 0.2, n: 2 };
+// 引力牢笼(computeConstraintAcceleration 软牢笼分支逐行;实机 k2=0.5 焊死不重启,
+// ⭐用户定制(2026-07-12 拍板):k2 降至 0.07 ——"减少重启频次但接受重启";
+// 扫参依据(三角形开局·20种子·T=3000):k2=0.5→167min零逃逸;0.1→中位57min;
+// 0.07→20/20逃逸·中位≈25min实时·行星先逃20/20;0.03→7.5min;无牢笼→0.6min
+// r>rc(0.2):a = k2·G·Mc·(r−rc)² 指向质心;k1=0 内区恒零;四体一视同仁
+const CAGE = { M: 1.5e7, k1: 0, re: 0.1, k2: 0.07, rc: 0.2, n: 2 };
 function cageAcc(i, com) {
   const dx = B[i].x - com.x, dy = B[i].y - com.y, dz = B[i].z - com.z;
   const r = Math.sqrt(dx * dx + dy * dy + dz * dz);
@@ -132,7 +158,7 @@ function surfaceTemp(runtime) {
 }
 let civEscaped = false;
 function civAdvance(dt, runtime) {
-  civ.years += dt;                                  // kt=10 → 1年/秒
+  civ.years += dt * KTIME;                          // 引擎:年率 = kt/10 × ktime(随流速同缩)
   const year = Math.floor(civ.years);
   for (let i = 0; i < 3; i++) {
     const dx = B[i].x - B[3].x, dy = B[i].y - B[3].y, dz = B[i].z - B[3].z;
@@ -1028,7 +1054,7 @@ function frame() {
   lastT = now; runT += dt;
 
   // 物理:固定步长 + 每帧≤10步(壁纸節奏)
-  acc = Math.min(acc + dt, TS * MAX_STEPS);
+  acc = Math.min(acc + dt * KTIME, TS * MAX_STEPS);   // ktime 时间流速(用户定制 0.3)
   let steps = 0;
   while (acc >= TS && steps < MAX_STEPS) { yoshidaStep(); acc -= TS; steps++; }
 
