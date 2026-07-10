@@ -496,7 +496,9 @@ const DUST_FRAG =
   '}';
 const DUST_WARM = [1, 0.769, 0.769], DUST_COOL = [0.710, 0.812, 1];
 const dustSystems = [];
-function dustSystem(n, rMin, rMax, sizeK, tint, bright, baseAlpha) {
+// objScale:WE 对象 scale 作用于整个粒子系统坐标系——发射器/粒子尺寸/速度同缩
+// (桌面实测为细小微粒,证实尺寸随缩;只缩发射器会得到 4~5 倍大的错误光团)
+function dustSystem(n, rMin, rMax, sizeK, objScale, tint, bright, baseAlpha) {
   const pos = new Float32Array(n * 3), size = new Float32Array(n), alp = new Float32Array(n),
         col = new Float32Array(n * 3), birth = new Float32Array(n), life = new Float32Array(n);
   const spawn = (i, t0) => {
@@ -505,7 +507,7 @@ function dustSystem(n, rMin, rMax, sizeK, tint, bright, baseAlpha) {
     pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
     pos[i * 3 + 1] = r * Math.cos(ph);
     pos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
-    size[i] = (0.1 + Math.random() * 1.9) * sizeK;
+    size[i] = (0.1 + Math.random() * 1.9) * sizeK * objScale;
     const k = Math.random();
     for (let c = 0; c < 3; c++)
       col[i * 3 + c] = (DUST_WARM[c] + (DUST_COOL[c] - DUST_WARM[c]) * k) * tint[c] * bright * 1.21;
@@ -529,10 +531,10 @@ function dustSystem(n, rMin, rMax, sizeK, tint, bright, baseAlpha) {
   const p = new THREE.Points(g, mat);
   p.frustumCulled = false;
   dustGroup.add(p);
-  dustSystems.push({ g, mat, n, spawn, birth, life, baseAlpha });
+  dustSystems.push({ g, mat, n, spawn, birth, life, baseAlpha, objScale });
 }
-dustSystem(100, 2.20, 3.08, 0.1, [0.945, 0.871, 1], 2, 0.95);       // star1
-dustSystem(200, 4.20, 5.88, 0.07, [0.639, 0.529, 0.686], 4, 1.0);   // star2
+dustSystem(100, 2.20, 3.08, 0.1, 0.22, [0.945, 0.871, 1], 2, 0.95);       // star1
+dustSystem(200, 4.20, 5.88, 0.07, 0.42, [0.639, 0.529, 0.686], 4, 1.0);   // star2
 function advanceDust(dt) {
   for (const s of dustSystems) {
     const pos = s.g.attributes.position.array, alp = s.g.attributes.aAlpha.array;
@@ -542,7 +544,7 @@ function advanceDust(dt) {
         s.spawn(i, runT);
         continue;
       }
-      pos[i * 3] += -0.1 * 0.61 * dt;            // velocityrandom(-0.1,0,0)×speed0.61
+      pos[i * 3] += -0.1 * 0.61 * s.objScale * dt;   // velocityrandom(-0.1,0,0)×speed0.61×系统scale
       const a = Math.max(0, age) / s.life[i];    // alphafade 三角包络
       alp[i] = s.baseAlpha * (a < 0.5 ? a * 2 : (1 - a) * 2);
     }
@@ -596,10 +598,11 @@ composer.addPass(new RenderPass(scene, camera));
 // iterations=6/scatter=2 → radius=1.0 宽散射;strength 为 WE↔Unreal 唯一量纲标定值。
 // 原自创 ACES(exposure1.15)色调映射已删——WE hdr 显示端为线性直出(clamp),
 // 此前"盘面调亮2-3×再靠ACES压回"的补偿链一并废除
+// ⚠️顺序:WE 的超后处理层(godrays/CRT/颗粒)是场景内图层,处理的是"泛光前"的画面;
+// scene 级泛光作用于最终合成 → bloomPass 在 addPass 链的最末(见 grainPass 之后)
 const BLOOM_STRENGTH = 0.7;
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), BLOOM_STRENGTH, 1.0, 0.46);
 bloomPass.highPassUniforms['smoothWidth'].value = 0.88;
-composer.addPass(bloomPass);
 
 // godrays(审计#6,effects/godrays 五 pass 源码逐行移植,pkg 自带 .frag/.vert):
 // ① downsample2 → 半分辨率RT1:rgb×=a 后按 step(0.45, dot((0.11,0.59,0.3),rgb)) 硬阈值,
@@ -667,7 +670,9 @@ class GodraysPass extends Pass {
         '  vec2 stp = dir * dist / 29.0;\n' +
         '  vec4 alb = vec4(0.0);\n' +
         '  for (int i = 0; i < 30; i++) {\n' +
-        '    alb += texture2D(tDiffuse, tc) * (float(i) / 29.0);\n' +
+        // 越界样本记零:防 RT clamp 把画面边缘亮点拖成无限长光柱(画面外无光语义)
+        '    float inb = step(0.0, tc.x) * step(tc.x, 1.0) * step(0.0, tc.y) * step(tc.y, 1.0);\n' +
+        '    alb += texture2D(tDiffuse, tc) * inb * (float(i) / 29.0);\n' +
         '    tc -= stp;\n' +
         '  }\n' +
         '  gl_FragColor = vec4(0.3 * 0.1 * alb.rgb, clamp(0.3 * 0.1 * alb.a, 0.0, 1.0));\n' +
@@ -877,6 +882,7 @@ const grainPass = new ShaderPass({
     '}'
 });
 composer.addPass(grainPass);
+composer.addPass(bloomPass);   // WE:scene 泛光最后作用于合成结果(效果层吃的是泛光前画面)
 
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
