@@ -11,6 +11,7 @@ import { EffectComposer } from './vendor/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './vendor/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from './vendor/jsm/postprocessing/ShaderPass.js';
+import { Pass, FullScreenQuad } from './vendor/jsm/postprocessing/Pass.js';
 
 /* ==================== 物理引擎(壁纸原样) ==================== */
 // 微缩系统:1单位长度=1e12m,1单位质量=1e30/5e6,1单位时间=1年
@@ -256,6 +257,34 @@ const SUNS = [
 ];
 const SA3_TINT = 0xffcbb1;   // 三星同色 _16/_24/_33 = (1,0.796,0.694)
 const SA3_BASE = new THREE.Color(1, 0.796, 0.694);   // pulse 呼吸的基色(每帧×tint)
+// util/noise(WE 内置 256²)红通道 CPU 采样器 —— pulse.frag 对噪声贴图做的是
+// 单点采样(uv 只随时间平移),等效于逐帧取一个标量;双线性+环绕与纹理采样一致
+const noiseR = { w: 0, h: 0, data: null };
+(function () {
+  const img = new Image();
+  img.onload = () => {
+    const cv = document.createElement('canvas');
+    cv.width = img.width; cv.height = img.height;
+    const c2 = cv.getContext('2d');
+    c2.drawImage(img, 0, 0);
+    const d = c2.getImageData(0, 0, img.width, img.height).data;
+    noiseR.w = img.width; noiseR.h = img.height;
+    noiseR.data = new Uint8Array(img.width * img.height);
+    for (let i = 0; i < noiseR.data.length; i++) noiseR.data[i] = d[i * 4];
+  };
+  img.src = 'assets/wp/wenoise.png';
+})();
+function sampleNoiseR(u, v) {
+  if (!noiseR.data) return 0;
+  const w = noiseR.w, h = noiseR.h, d = noiseR.data;
+  let x = (u * w) % w; if (x < 0) x += w;
+  let y = (v * h) % h; if (y < 0) y += h;
+  const x0 = Math.floor(x) % w, y0 = Math.floor(y) % h;
+  const x1 = (x0 + 1) % w, y1 = (y0 + 1) % h;
+  const fx = x - Math.floor(x), fy = y - Math.floor(y);
+  return (d[y0 * w + x0] * (1 - fx) * (1 - fy) + d[y0 * w + x1] * fx * (1 - fy) +
+          d[y1 * w + x0] * (1 - fx) * fy + d[y1 * w + x1] * fx * fy) / 255;
+}
 const suns = [];
 for (let i = 0; i < 3; i++) {
   const t = SUNS[i];
@@ -431,43 +460,96 @@ for (let i = 0; i < 4; i++) {
   trailPoints.push({ geo, mat });
 }
 
-// 尘埃粒子(壁纸 star1/star2 解码:尺寸0.1/0.07·计数0.5/1·亮度2·alpha0.95·
-// 颜色(0.945,0.871,1)淡紫白·速度0.61·星星本身在 st2 贴图里,不另造)
-const dustGroups = [];
-function dustLayer(count, size) {
-  const n = count, pos = new Float32Array(n * 3), vel = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    const r = 3 + Math.random() * 14;
+// 尘埃粒子(审计#5,particles/star.json + 对象24/25 实例覆盖全解码):
+// · 发射器 sphererandom r10~14 × 对象scale(0.22/0.42) = 壳层 2.20~3.08 / 4.20~5.88 世界
+// · 粒子尺寸 = sizerandom(0.1~2) × size覆盖(0.1/0.07) = 0.01~0.2 / 0.007~0.14 世界
+// · 寿命 lifetimerandom 5~10s,alphafade 三角包络(WE 缺省 fadein/fadeout 各半)
+// · 颜色 = colorrandom 暖粉(1,.769,.769)↔蓝白(.710,.812,1) 随机插值 × colorn × brightness
+//   × 材质 halo_1 overbright 1.21:sys1 ×(0.945,0.871,1)×2  sys2 ×(0.639,0.529,0.686)×4
+// · alpha 0.95 / 1.0;速度 velocityrandom 恒定(-0.1,0,0) × speed 0.61
+// · 贴图 = WE 内置 particle/halo_2(64² 柔光点);材质 translucent 普通混合·不写深度
+// · 计数 = maxcount200 × count覆盖(0.5/1) = 100/200(rate 远超上限→恒满员,亡即重生)
+// · 母组 = MAIN 0-1(origin.z = 0.4×gjz,渲染循环同步);emitter 10°俯仰对各向同性壳无感,略
+const haloMap = texLoader.load('assets/wp/halo_p.png');
+const dustGroup = new THREE.Group();
+scene.add(dustGroup);
+const DUST_VERT =
+  'attribute float aSize;\n' +
+  'attribute float aAlpha;\n' +
+  'attribute vec3 aColor;\n' +
+  'varying float vA;\n' +
+  'varying vec3 vC;\n' +
+  'uniform float uPxScale;\n' +
+  'void main(){\n' +
+  '  vA = aAlpha; vC = aColor;\n' +
+  '  vec4 mv = modelViewMatrix * vec4(position, 1.0);\n' +
+  '  gl_PointSize = aSize * uPxScale / max(-mv.z, 0.1);\n' +
+  '  gl_Position = projectionMatrix * mv;\n' +
+  '}';
+const DUST_FRAG =
+  'varying float vA;\n' +
+  'varying vec3 vC;\n' +
+  'uniform sampler2D uMap;\n' +
+  'void main(){\n' +
+  '  vec4 t = texture2D(uMap, gl_PointCoord);\n' +
+  '  gl_FragColor = vec4(vC * t.rgb, t.a * vA);\n' +
+  '}';
+const DUST_WARM = [1, 0.769, 0.769], DUST_COOL = [0.710, 0.812, 1];
+const dustSystems = [];
+function dustSystem(n, rMin, rMax, sizeK, tint, bright, baseAlpha) {
+  const pos = new Float32Array(n * 3), size = new Float32Array(n), alp = new Float32Array(n),
+        col = new Float32Array(n * 3), birth = new Float32Array(n), life = new Float32Array(n);
+  const spawn = (i, t0) => {
+    const r = rMin + Math.random() * (rMax - rMin);
     const th = Math.random() * Math.PI * 2, ph = Math.acos(Math.random() * 2 - 1);
     pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
     pos[i * 3 + 1] = r * Math.cos(ph);
     pos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
-    vel[i * 3] = (Math.random() - 0.5) * 0.061;
-    vel[i * 3 + 1] = (Math.random() - 0.5) * 0.061;
-    vel[i * 3 + 2] = (Math.random() - 0.5) * 0.061;
+    size[i] = (0.1 + Math.random() * 1.9) * sizeK;
+    const k = Math.random();
+    for (let c = 0; c < 3; c++)
+      col[i * 3 + c] = (DUST_WARM[c] + (DUST_COOL[c] - DUST_WARM[c]) * k) * tint[c] * bright * 1.21;
+    birth[i] = t0;
+    life[i] = 5 + Math.random() * 5;
+    alp[i] = 0;
+  };
+  for (let i = 0; i < n; i++) {
+    spawn(i, -Math.random() * 10);       // 初始铺满生命周期相位
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const p = new THREE.Points(g, new THREE.PointsMaterial({
-    color: 0xf1defe, size, sizeAttenuation: true, map: glowSoft,
-    transparent: true, opacity: 0.85, depthWrite: false,
-    blending: THREE.AdditiveBlending
-  }));
-  p.userData.vel = vel;
-  scene.add(p);
-  dustGroups.push(p);
+  g.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+  g.setAttribute('aAlpha', new THREE.BufferAttribute(alp, 1));
+  g.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uMap: { value: haloMap }, uPxScale: { value: 1000 } },
+    vertexShader: DUST_VERT, fragmentShader: DUST_FRAG,
+    transparent: true, depthWrite: false          // halo_1: translucent + depthwrite disabled
+  });
+  const p = new THREE.Points(g, mat);
+  p.frustumCulled = false;
+  dustGroup.add(p);
+  dustSystems.push({ g, mat, n, spawn, birth, life, baseAlpha });
 }
-dustLayer(40, 0.09);    // dust1:size 0.1 × count 0.5(亮度2 → 提尺寸/不透明度)
-dustLayer(80, 0.063);   // dust2:size 0.07 × count 1
+dustSystem(100, 2.20, 3.08, 0.1, [0.945, 0.871, 1], 2, 0.95);       // star1
+dustSystem(200, 4.20, 5.88, 0.07, [0.639, 0.529, 0.686], 4, 1.0);   // star2
 function advanceDust(dt) {
-  for (const p of dustGroups) {
-    const pos = p.geometry.attributes.position.array, vel = p.userData.vel;
-    for (let i = 0; i < pos.length; i += 3) {
-      pos[i] += vel[i] * dt; pos[i + 1] += vel[i + 1] * dt; pos[i + 2] += vel[i + 2] * dt;
-      const d2 = pos[i] * pos[i] + pos[i + 1] * pos[i + 1] + pos[i + 2] * pos[i + 2];
-      if (d2 > 400) { pos[i] *= -0.9; pos[i + 1] *= -0.9; pos[i + 2] *= -0.9; }
+  for (const s of dustSystems) {
+    const pos = s.g.attributes.position.array, alp = s.g.attributes.aAlpha.array;
+    for (let i = 0; i < s.n; i++) {
+      const age = runT - s.birth[i];
+      if (age > s.life[i]) {
+        s.spawn(i, runT);
+        continue;
+      }
+      pos[i * 3] += -0.1 * 0.61 * dt;            // velocityrandom(-0.1,0,0)×speed0.61
+      const a = Math.max(0, age) / s.life[i];    // alphafade 三角包络
+      alp[i] = s.baseAlpha * (a < 0.5 ? a * 2 : (1 - a) * 2);
     }
-    p.geometry.attributes.position.needsUpdate = true;
+    s.g.attributes.position.needsUpdate = true;
+    s.g.attributes.aAlpha.needsUpdate = true;
+    s.g.attributes.aSize.needsUpdate = true;
+    s.g.attributes.aColor.needsUpdate = true;
   }
 }
 
@@ -519,75 +601,249 @@ const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), BLOOM_STRENGTH, 1
 bloomPass.highPassUniforms['smoothWidth'].value = 0.88;
 composer.addPass(bloomPass);
 
-// godrays 移植(effects/godrays 解码:方向π·强度0.3·阈值0.45,含原版的噪声调制预处理)
-const godraysPass = new ShaderPass({
-  uniforms: {
-    tDiffuse: { value: null },
-    uTime: { value: 0 },
-    uIntensity: { value: 0.3 },
-    uThreshold: { value: 0.45 }
-  },
-  vertexShader:
-    'varying vec2 vUv;\n' +
-    'void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader:
-    'varying vec2 vUv;\n' +
-    'uniform sampler2D tDiffuse;\n' +
-    'uniform float uTime;\n' +
-    'uniform float uIntensity;\n' +
-    'uniform float uThreshold;\n' +
-    'float n2(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }\n' +
-    'void main(){\n' +
-    '  vec4 base = texture2D(tDiffuse, vUv);\n' +
-    '  vec2 nd = vec2(0.0, -1.0);\n' +           // direction=π:光线向上蔓延
-    '  float reach = 0.14;\n' +                  // 原版经降采样+双高斯后有效光程很短
-    '  vec2 tc = vUv + nd * reach;\n' +
-    '  vec2 stp = nd * reach / 23.0;\n' +
-    '  vec3 rays = vec3(0.0);\n' +
-    '  for (int i = 0; i < 24; i++) {\n' +
-    '    vec3 s = max(texture2D(tDiffuse, tc).rgb - uThreshold, 0.0);\n' +
-    '    tc -= stp;\n' +
-    '    rays += s * (float(i) / 23.0);\n' +
-    '  }\n' +
-    // 原版 cast 前置噪声(amount0.4/scale3/speed0.15):光线碎化、缓慢流动
-    '  float ns = 0.6 + 0.4 * n2(floor(vUv * 3.0 * 24.0) + floor(uTime * 0.15 * 24.0));\n' +
-    '  base.rgb += rays * ns * uIntensity * 0.02;\n' +
-    '  gl_FragColor = base;\n' +
-    '}'
-});
+// godrays(审计#6,effects/godrays 五 pass 源码逐行移植,pkg 自带 .frag/.vert):
+// ① downsample2 → 半分辨率RT1:rgb×=a 后按 step(0.45, dot((0.11,0.59,0.3),rgb)) 硬阈值,
+//    clouds_256 双旋转采样噪声调制 alpha:mix(a, a·n1·n2, 0.4) → smoothstep(0.5∓0.2)
+// ② cast → RT2:CASTER=Directional,dir=rotate((0,-0.5), π−π),dist=0.5×raylength(1),
+//    30 采样权重 i/29,输出 ×0.1×rayintensity(0.3)×color(1,1,1)
+// ③④ godrays_gaussian blur7a(精确 4 tap 权重)X/Y,blurscale=2/半分辨率
+// ⑤ combine:BLENDMODE9=BlendAdd → rgb = mix(base, min(base+rays,1), rays.a)
+const cloudsTex = texLoader.load('assets/wp/clouds256.png');
+cloudsTex.wrapS = cloudsTex.wrapT = THREE.RepeatWrapping;
+const FSQ_VERT =
+  'varying vec2 vUv;\n' +
+  'void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
+class GodraysPass extends Pass {
+  constructor() {
+    super();
+    const opt = { type: THREE.HalfFloatType, depthBuffer: false };
+    this.rt1 = new THREE.WebGLRenderTarget(1, 1, opt);   // _rt_HalfCompoBuffer1(scale 2)
+    this.rt2 = new THREE.WebGLRenderTarget(1, 1, opt);   // _rt_HalfCompoBuffer2
+    this.mDown = new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: null }, tNoise: { value: cloudsTex }, uTime: { value: 0 }
+      },
+      vertexShader:
+        'varying vec2 vUv;\n' +
+        'varying vec4 vN;\n' +
+        'uniform float uTime;\n' +
+        'void main(){\n' +
+        '  vUv = uv;\n' +
+        // downsample2.vert 原式:xy=(uv+t·speed)·scale;wz=(uv.y,-uv.x)·0.633+(-t,t)·0.5·speed 再 ·scale
+        '  vN.xy = (uv + uTime * 0.15) * 3.0;\n' +
+        '  vN.w = (uv.y * 0.633 - uTime * 0.5 * 0.15) * 3.0;\n' +
+        '  vN.z = (-uv.x * 0.633 + uTime * 0.5 * 0.15) * 3.0;\n' +
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);\n' +
+        '}',
+      fragmentShader:
+        'varying vec2 vUv;\n' +
+        'varying vec4 vN;\n' +
+        'uniform sampler2D tDiffuse;\n' +
+        'uniform sampler2D tNoise;\n' +
+        'void main(){\n' +
+        '  vec4 s = texture2D(tDiffuse, vUv);\n' +
+        '  float n1 = texture2D(tNoise, vN.xy).r;\n' +
+        '  float n2 = texture2D(tNoise, vN.zw).r;\n' +
+        '  float noiseSample = mix(s.a, s.a * n1 * n2, 0.4);\n' +
+        '  s.rgb *= s.a;\n' +
+        '  s.a = 1.0;\n' +
+        '  vec4 o = s * step(0.45, dot(vec3(0.11, 0.59, 0.3), s.rgb));\n' +
+        '  o.a *= smoothstep(0.3, 0.7, noiseSample);\n' +   // 0.5∓noisesmoothness(0.2)
+        '  gl_FragColor = o;\n' +
+        '}'
+    });
+    this.mCast = new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: null } },
+      vertexShader: FSQ_VERT,
+      fragmentShader:
+        'varying vec2 vUv;\n' +
+        'uniform sampler2D tDiffuse;\n' +
+        'void main(){\n' +
+        '  vec2 dir = vec2(0.0, -0.5);\n' +      // rotateVec2((0,-0.5), direction−π)|direction=π
+        '  float dist = length(dir);\n' +
+        '  dir /= dist;\n' +
+        '  dist *= 1.0;\n' +                     // × g_Length(raylength=1)
+        '  vec2 tc = vUv + dir * dist;\n' +
+        '  vec2 stp = dir * dist / 29.0;\n' +
+        '  vec4 alb = vec4(0.0);\n' +
+        '  for (int i = 0; i < 30; i++) {\n' +
+        '    alb += texture2D(tDiffuse, tc) * (float(i) / 29.0);\n' +
+        '    tc -= stp;\n' +
+        '  }\n' +
+        '  gl_FragColor = vec4(0.3 * 0.1 * alb.rgb, clamp(0.3 * 0.1 * alb.a, 0.0, 1.0));\n' +
+        '}'
+    });
+    const mkBlur = vertical => new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: null }, uD: { value: new THREE.Vector2() } },
+      vertexShader: FSQ_VERT,
+      fragmentShader:
+        'varying vec2 vUv;\n' +
+        'uniform sampler2D tDiffuse;\n' +
+        'uniform vec2 uD;\n' +
+        'void main(){\n' +                       // common_blur.h blur7a 原 tap
+        '  gl_FragColor = texture2D(tDiffuse, vUv + 2.3515644035337887 * uD) * 0.2028175528299753\n' +
+        '    + texture2D(tDiffuse, vUv + 0.469433779698372 * uD) * 0.4044856614512112\n' +
+        '    + texture2D(tDiffuse, vUv - 1.4091998770852121 * uD) * 0.3213933537319605\n' +
+        '    + texture2D(tDiffuse, vUv - 3.0 * uD) * 0.0713034319868530;\n' +
+        '}'
+    });
+    this.mBlurX = mkBlur(false);
+    this.mBlurY = mkBlur(true);
+    this.mComb = new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: null }, tRays: { value: null } },
+      vertexShader: FSQ_VERT,
+      fragmentShader:
+        'varying vec2 vUv;\n' +
+        'uniform sampler2D tDiffuse;\n' +
+        'uniform sampler2D tRays;\n' +
+        'void main(){\n' +
+        '  vec4 rays = texture2D(tRays, vUv);\n' +
+        '  vec4 base = texture2D(tDiffuse, vUv);\n' +
+        '  base.rgb = mix(base.rgb, min(base.rgb + rays.rgb, vec3(1.0)), rays.a);\n' +  // BlendAdd
+        '  base.a = clamp(base.a + rays.a, 0.0, 1.0);\n' +
+        '  gl_FragColor = base;\n' +
+        '}'
+    });
+    this.fsQuad = new FullScreenQuad(null);
+    this.uTime = 0;
+  }
+  setSize(w, h) {
+    const hw = Math.max(1, Math.round(w / 2)), hh = Math.max(1, Math.round(h / 2));
+    this.rt1.setSize(hw, hh);
+    this.rt2.setSize(hw, hh);
+    this.mBlurX.uniforms.uD.value.set(2 / hw, 0);   // blurscale=2 / RT 分辨率
+    this.mBlurY.uniforms.uD.value.set(0, 2 / hh);
+  }
+  render(renderer, writeBuffer, readBuffer) {
+    const run = (mat, target) => {
+      this.fsQuad.material = mat;
+      renderer.setRenderTarget(target);
+      this.fsQuad.render(renderer);
+    };
+    this.mDown.uniforms.uTime.value = this.uTime;
+    this.mDown.uniforms.tDiffuse.value = readBuffer.texture;
+    run(this.mDown, this.rt1);
+    this.mCast.uniforms.tDiffuse.value = this.rt1.texture;
+    run(this.mCast, this.rt2);
+    this.mBlurX.uniforms.tDiffuse.value = this.rt2.texture;
+    run(this.mBlurX, this.rt1);
+    this.mBlurY.uniforms.tDiffuse.value = this.rt1.texture;
+    run(this.mBlurY, this.rt2);
+    this.mComb.uniforms.tDiffuse.value = readBuffer.texture;
+    this.mComb.uniforms.tRays.value = this.rt2.texture;
+    run(this.mComb, this.renderToScreen ? null : writeBuffer);
+  }
+}
+const godraysPass = new GodraysPass();
 composer.addPass(godraysPass);
 
-// 胶片颗粒(filmgrain.vert/frag 完整移植:双层连续滚动噪声纹理·通道错位·灰度相乘·
-// scale=7·strength=0.15;混合取"黑处不变"的叠加族——原版 BLENDMODE 12 属 PS 叠加族)
-// + CRT(0.03:荫罩 + 乘性静噪 0.49,黑处同样不变)
-const noiseTex = (function () {
-  const s = 256, cv = document.createElement('canvas');
-  cv.width = cv.height = s;
-  const x = cv.getContext('2d');
-  const d = x.createImageData(s, s);
-  for (let i = 0; i < d.data.length; i += 4) {
-    d.data[i] = Math.random() * 255;
-    d.data[i + 1] = Math.random() * 255;
-    d.data[i + 2] = Math.random() * 255;
-    d.data[i + 3] = 255;
+// CRT(审计#6,workshop/2821337237 双 pass 源码逐行移植;用户配置:SHADOWMASK=3 Grid/
+// Resolution 0.38/静噪 0.49/ARTIFACTS 0/BLACKBORDERS 0/曲率 0/边框(0,0)/亮度 1.5/
+// 饱和度 1/Light bleed 1.62/Opacity 0.03):
+// pass1 shadow_map → RT:网格荫罩(Grille=smoothstep(0,1,sin(x·π/2)+1.3) 行×列)+
+//   逐格 hash 静噪 ×0.49(坐标=uv×0.38/texel,即 0.38×设备像素)
+// pass2 crt_screen:baseAlbedo=效果前原画面,处理链=Light bleed(pow1.62+四邻0.05)→
+//   暗角(1−|uv−0.5|)→ ×(亮度+亮度)=×3 → 最终 mix(原画面, 处理后, 0.03×base.a)
+class CrtPass extends Pass {
+  constructor() {
+    super();
+    this.rtS = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
+    this.mShadow = new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: null }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }
+      },
+      vertexShader: FSQ_VERT,
+      fragmentShader:
+        'varying vec2 vUv;\n' +
+        'uniform sampler2D tDiffuse;\n' +
+        'uniform float uTime;\n' +
+        'uniform vec2 uRes;\n' +
+        'float hash(vec2 p){\n' +
+        '  vec3 p3 = fract(vec3(p.xyx) * 0.1031);\n' +
+        '  p3 += dot(p3, p3.yzx + 33.33);\n' +
+        '  return fract((p3.x + p3.y) * p3.z);\n' +
+        '}\n' +
+        'float Grille(float x){ return smoothstep(0.0, 1.0, sin(x * 1.5707963) + 1.3); }\n' +
+        'float MaskRows(vec2 uv){\n' +
+        '  uv.x *= 0.5; uv.x -= floor(uv.x);\n' +
+        '  if (uv.x < 0.0) uv.y += 0.5;\n' +
+        '  return Grille(uv.y);\n' +
+        '}\n' +
+        'float MaskCols(vec2 uv){\n' +
+        '  uv.y *= 0.5; uv.y -= floor(uv.y);\n' +
+        '  if (uv.y < 0.0) uv.x += 0.5;\n' +
+        '  return Grille(uv.x);\n' +
+        '}\n' +
+        'void main(){\n' +
+        '  vec4 albedo = texture2D(tDiffuse, vUv);\n' +
+        '  vec2 pc = vUv * 0.38 * uRes;\n' +               // uv×Resolution/g_TexelSize
+        '  albedo.rgb *= MaskCols(pc) * MaskRows(pc);\n' + // SHADOWMASK=3 Grid
+        '  albedo.rgb *= 1.0 - hash(floor(pc + 0.5) + vec2(uTime)) * 0.49;\n' +
+        '  gl_FragColor = albedo;\n' +
+        '}'
+    });
+    this.mScreen = new THREE.ShaderMaterial({
+      uniforms: { tOrig: { value: null }, tShadow: { value: null } },
+      vertexShader: FSQ_VERT,
+      fragmentShader:
+        'varying vec2 vUv;\n' +
+        'uniform sampler2D tOrig;\n' +
+        'uniform sampler2D tShadow;\n' +
+        'vec3 bleed(vec3 color, vec2 uv){\n' +             // crt_screen bloom():Light bleed 1.62
+        '  color = pow(color, vec3(1.62));\n' +
+        '  vec2 r = vec2(0.002, 0.0), u = vec2(0.0, 0.002);\n' +
+        '  vec3 s = texture2D(tShadow, uv + u).rgb + texture2D(tShadow, uv - u).rgb\n' +
+        '         + texture2D(tShadow, uv - r).rgb + texture2D(tShadow, uv + r).rgb;\n' +
+        '  return pow(color + s * 0.05, vec3(1.0 / 1.62));\n' +
+        '}\n' +
+        'void main(){\n' +
+        '  vec4 base = texture2D(tOrig, vUv);\n' +
+        '  float opacity = 0.03 * base.a;\n' +
+        // 曲率0/边框(0,0):z=sqrt(0.5),uvImage=(uv−0.5)/(z·1.414)+0.5,屏幕uv=(0,0)
+        '  vec2 perspCoord = vUv - 0.5;\n' +
+        '  float z = sqrt(0.5);\n' +
+        '  vec2 uvImage = (vUv - 0.5) / (z * 1.414) + 0.5;\n' +
+        '  vec3 c = bleed(texture2D(tShadow, uvImage).rgb, uvImage);\n' +
+        '  c *= 1.0 - length(perspCoord);\n' +             // 暗角
+        '  c *= 3.0;\n' +                                   // ×(brightness+brightness),1.5×2
+        '  gl_FragColor = vec4(mix(base.rgb, c, opacity), base.a);\n' +
+        '}'
+    });
+    this.fsQuad = new FullScreenQuad(null);
+    this.uTime = 0;
   }
-  x.putImageData(d, 0, 0);
-  const t = new THREE.CanvasTexture(cv);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.minFilter = THREE.LinearFilter;
-  t.magFilter = THREE.LinearFilter;
-  t.generateMipmaps = false;
-  return t;
-})();
+  setSize(w, h) {
+    this.rtS.setSize(w, h);                                 // fbos scale=1 全分辨率
+    this.mShadow.uniforms.uRes.value.set(w, h);
+  }
+  render(renderer, writeBuffer, readBuffer) {
+    this.mShadow.uniforms.uTime.value = this.uTime;
+    this.mShadow.uniforms.tDiffuse.value = readBuffer.texture;
+    this.fsQuad.material = this.mShadow;
+    renderer.setRenderTarget(this.rtS);
+    this.fsQuad.render(renderer);
+    this.mScreen.uniforms.tOrig.value = readBuffer.texture;
+    this.mScreen.uniforms.tShadow.value = this.rtS.texture;
+    this.fsQuad.material = this.mScreen;
+    renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+    this.fsQuad.render(renderer);
+  }
+}
+const crtPass = new CrtPass();
+composer.addPass(crtPass);
+
+// 胶片颗粒(审计#6 修正:filmgrain.vert/frag 逐行,噪声=WE 内置 util/noise 贴图,
+// GREYSCALE=1 权重 (0.11,0.59,0.3),BLENDMODE12=SoftLight(此前"叠加族"是猜的已纠),
+// scale=7 / strength=0.15 / exponent=1;旧并入的 CRT 近似已拆出为独立精确双 pass)
+const noiseTex = texLoader.load('assets/wp/wenoise.png');
+noiseTex.wrapS = noiseTex.wrapT = THREE.RepeatWrapping;
 const grainPass = new ShaderPass({
   uniforms: {
     tDiffuse: { value: null },
     tNoise: { value: noiseTex },
     uTime: { value: 0 },
     uAspect: { value: 1 },
-    uRes: { value: new THREE.Vector2(1, 1) },
-    uGrain: { value: 0.15 },
-    uCrt: { value: 0.03 }
+    uGrain: { value: 0.15 }
   },
   vertexShader:
     'varying vec2 vUv;\n' +
@@ -598,28 +854,25 @@ const grainPass = new ShaderPass({
     'uniform sampler2D tNoise;\n' +
     'uniform float uTime;\n' +
     'uniform float uAspect;\n' +
-    'uniform vec2 uRes;\n' +
     'uniform float uGrain;\n' +
-    'uniform float uCrt;\n' +
-    'float grey(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }\n' +
+    'float grey(vec3 c){ return dot(c, vec3(0.11, 0.59, 0.3)); }\n' +   // common.h greyscale
+    'float sl(float b, float n){\n' +                                    // BlendSoftLightf 原式
+    '  return (n < 0.5) ? (2.0 * b * n + b * b * (1.0 - 2.0 * n))\n' +
+    '                   : (sqrt(b) * (2.0 * n - 1.0) + 2.0 * b * (1.0 - n));\n' +
+    '}\n' +
     'void main(){\n' +
     '  vec4 c = texture2D(tDiffuse, vUv);\n' +
     // filmgrain.vert 原式:uv1=(uv+t)·scale·(aspect,1), uv2=(uv−2.5t)·scale·0.52·(aspect,1)
     '  float t = fract(uTime);\n' +
     '  vec2 uv1 = (vUv + t) * 7.0 * vec2(uAspect, 1.0);\n' +
     '  vec2 uv2 = (vUv - t * 2.5) * 7.0 * 0.52 * vec2(uAspect, 1.0);\n' +
-    // filmgrain.frag 原式:第二层取 .gbr 通道,灰度化后相乘
+    // filmgrain.frag 原式:第二层取 .gbr 通道,灰度化后相乘,pow(exponent=1)
     '  float n1 = grey(texture2D(tNoise, uv1).rgb);\n' +
     '  float n2 = grey(texture2D(tNoise, uv2).gbr);\n' +
     '  float g = clamp(n1 * n2, 0.0, 1.0);\n' +
-    // 叠加混合(黑处不变):base<0.5 → 2bg,否则 1−2(1−b)(1−g);按 strength 插值
-    '  vec3 ov = mix(2.0 * c.rgb * g, 1.0 - 2.0 * (1.0 - c.rgb) * (1.0 - g), step(0.5, c.rgb));\n' +
-    '  c.rgb = mix(c.rgb, ov, uGrain);\n' +
-    // CRT:荫罩横纹 + 乘性静噪(振幅×0.49×0.03,黑处为零)
-    '  float scan = 0.5 + 0.5 * sin(vUv.y * uRes.y * 3.14159);\n' +
-    '  c.rgb *= 1.0 - uCrt * 0.5 * scan;\n' +
-    '  float sn = texture2D(tNoise, vUv * uRes / 256.0 + t).r - 0.5;\n' +
-    '  c.rgb *= 1.0 + sn * uCrt * 0.49;\n' +
+    '  vec3 b = clamp(c.rgb, 0.0, 1.0);\n' +
+    '  vec3 s = vec3(sl(b.r, g), sl(b.g, g), sl(b.b, g));\n' +
+    '  c.rgb = mix(c.rgb, s, uGrain);\n' +
     '  gl_FragColor = c;\n' +
     '}'
 });
@@ -628,11 +881,11 @@ composer.addPass(grainPass);
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
   composer.setSize(innerWidth * DPR, innerHeight * DPR);
-  grainPass.uniforms.uRes.value.set(innerWidth * DPR, innerHeight * DPR);
   grainPass.uniforms.uAspect.value = innerWidth / innerHeight;
   // 点精灵透视尺寸:设备像素/世界单位(单位距离处)
   const pxScale = innerHeight * DPR / (2 * Math.tan(25 * Math.PI / 180));
   for (const t of trailPoints) t.mat.uniforms.uPxScale.value = pxScale;
+  for (const s of dustSystems) s.mat.uniforms.uPxScale.value = pxScale;
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
 }
@@ -781,11 +1034,13 @@ function frame() {
   curGJZ = gjzNow();
   world.position.z = curGJZ;
   olGroup.position.z = curGJZ;
+  dustGroup.position.z = 0.4 * curGJZ;   // 母组 MAIN 0-1:origin.z = 0.4×gjz
 
-  // 尘埃漂移(壁纸 speed=0.61 量级) + 后处理时间
+  // 尘埃推进 + 后处理时间
   advanceDust(dt);
   grainPass.uniforms.uTime.value = runT;
-  godraysPass.uniforms.uTime.value = runT;
+  godraysPass.uTime = runT;
+  crtPass.uTime = runT;
 
   // 天体位置(质心系) + 随机游走自旋(壁纸 angles 脚本:k=1.5×1000×ft/30 度)
   const kTumble = Math.min(1.5 * 1000 * dt / 30, 3) * Math.PI / 180;
@@ -794,12 +1049,14 @@ function frame() {
     suns[i].core.rotation.y += kTumble * Math.random();
     suns[i].core.rotation.x += kTumble * Math.random();
   }
-  // sa3 pulse 呼吸(sa3 层挂载的 pulse 效果原参:speed=1.37/power=0.89/噪声0.38@0.35,
-  // 亮度乘性调制 tint 0.1137↔0.8235;原版为逐像素空间噪声,此处平滑时间噪声近似,
-  // 三星同相位=原版 phase=0 同源)
-  const pb = Math.pow(0.5 + 0.5 * Math.sin(runT * 1.37), 0.89);
-  const pn = 0.5 + 0.35 * Math.sin(runT * 0.35 * 6.2832) + 0.15 * Math.sin(runT * 0.35 * 17.0 + 1.3);
-  const pt = 0.1137 + (0.8235 - 0.1137) * Math.min(1, Math.max(0, pb + 0.38 * (pn - 0.5)));
+  // sa3 pulse(pulse.frag 逐行移植,AUDIOPROCESSING=0/PULSECOLOR=1/BLENDMODE9=BlendAdd):
+  //   pulse = smoothstep(0,1, sin(t·1.37 + (0−π/2))·0.5+0.5) × amount1
+  //   noise = noiseTex((t/12, t/36)·0.35).r × 0.38 ;  pulse = (pulse+noise)^0.89
+  //   rgb′ = mix(rgb×tintlow, rgb×tintlow + rgb×tinthigh, pulse) → 系数 = 0.1137 + 0.8235×pulse
+  const ps0 = Math.sin(runT * 1.37 - 1.5707963) * 0.5 + 0.5;
+  const psm = ps0 * ps0 * (3 - 2 * ps0);
+  const pnz = sampleNoiseR(runT * 0.08333333 * 0.35, runT * 0.02777777 * 0.35) * 0.38;
+  const pt = 0.1137 + 0.8235 * Math.pow(psm + pnz, 0.89);
   for (const s of suns) s.flare.material.color.copy(SA3_BASE).multiplyScalar(pt);
   planetG.position.set(B[3].x - com.x, B[3].y - com.y, B[3].z - com.z);
   planetBall.rotation.y += kTumble * Math.random();
