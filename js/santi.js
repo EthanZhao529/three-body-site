@@ -952,22 +952,33 @@ const boot = $('boot');
 const bootStatus = $('bootStatus');
 const spinnerEl = $('bootSpinner');
 let spinDeg = 0, spinTick = 0;
-let bootSeq = null;   // {hold, done} 渲染循环驱动(定时器会被后台节流)
-function runBootSequence(text, seconds, done, translucent) {
+let bootSeq = null;   // {hold, secs, fade, done} 渲染循环驱动(定时器会被后台节流)
+// fade>0 时按壁纸黑底 obj112 原式:保持 secs 秒全黑 → smoothstep 淡出 fade 秒
+// (原版:startTime=2s + fadeTime=3s,t=5s 才全透 —— 恰好盖住 gjz 冲镜段:
+//  t≈3.3s 天体穿过相机平面时黑幕仍有约56%,清屏时 gjz≈1 天体已基本落位)
+function runBootSequence(text, seconds, done, translucent, fade) {
   bootStatus.textContent = text;
   boot.classList.toggle('seq', !!translucent);   // 重启=半透明罩(壁纸式),首启=全黑
   boot.classList.remove('gone');
-  bootSeq = { hold: 0, secs: seconds, done };
+  if (fade) { boot.style.transition = 'none'; boot.style.opacity = '1'; }
+  bootSeq = { hold: 0, secs: seconds, fade: fade || 0, done };
 }
 function bootAdvance(dt) {
   if (!bootSeq) return;
   bootSeq.hold += dt;
-  if (bootSeq.hold >= bootSeq.secs) {
-    boot.classList.add('gone');
-    const cb = bootSeq.done;
-    bootSeq = null;
-    if (cb) cb();
+  const t = bootSeq.hold - bootSeq.secs;
+  if (t < 0) return;
+  if (t < bootSeq.fade) {
+    const p = t / bootSeq.fade;
+    boot.style.opacity = String(1 - p * p * (3 - 2 * p));   // smoothstep 淡出
+    return;
   }
+  boot.style.opacity = '';
+  boot.style.transition = '';
+  boot.classList.add('gone');
+  const cb = bootSeq.done;
+  bootSeq = null;
+  if (cb) cb();
 }
 
 /* ==================== 逃逸重启(壁纸:tj→延时120帧→重启) ==================== */
@@ -1114,5 +1125,5 @@ function frame() {
   composer.render();
 }
 // 首次进入:系统启动中
-runBootSequence('系统启动中', 2.8, () => setHud(true));
+runBootSequence('系统启动中', 2, () => setHud(true), false, 3);   // 黑底原时序:2s保持+3s淡出
 frame();
