@@ -236,7 +236,8 @@ function glowTexture() {
 const sunMap = texLoader.load('assets/wp/sun_em.webp');
 sunMap.colorSpace = THREE.NoColorSpace;
 sunMap.anisotropy = MAX_ANISO;
-const flareMap = texLoader.load('assets/wp/flare.png');
+const flareMap = texLoader.load('assets/wp/sa3.png');   // 真·sa3(512²带alpha:细四芒星+柔圆晕,峰值α0.79)
+const taMap = texLoader.load('assets/wp/ta.png');        // 轨迹点贴图(32²白色柔点,ta.tex 解码)
 const glowSoft = glowTexture();
 
 // 三星材质(Material__50.json 纯解码,审计第1条修正):
@@ -246,12 +247,15 @@ const glowSoft = glowTexture();
 //   星2 (1,.73333,.60784)×2 = (2.00, 1.4667, 1.2157)
 //   星3 (1,.51373,.37255)×2 = (2.00, 1.0275, 0.7451)
 // (此前把两通道相加得 2.0/2.85/3.0 是错的——albedo 通道在无光场景是死通道)
+// sa3 星芒尺寸=真值 512px×scale脚本(0.13×hNz)=1.997/1.531/1.065 世界单位
+// (贴图大部分透明,可见星芒约占画布47% → 视觉≈0.94/0.72/0.50 世界)
 const SUNS = [
-  { hdr: [1.00, 1.0000, 1.0000], r: 0.0867, flareScale: 0.80 },   // 半径=2.89×hNz(观距6下
-  { hdr: [2.00, 1.4667, 1.2157], r: 0.0665, flareScale: 0.61 },   // 与桌面星盘3.1vh锚定)
-  { hdr: [2.00, 1.0275, 0.7451], r: 0.0462, flareScale: 0.43 }
+  { hdr: [1.00, 1.0000, 1.0000], r: 0.0867, flareScale: 1.9968 },   // 半径=2.89×hNz
+  { hdr: [2.00, 1.4667, 1.2157], r: 0.0665, flareScale: 1.5309 },   // (观距6下与桌面
+  { hdr: [2.00, 1.0275, 0.7451], r: 0.0462, flareScale: 1.0650 }    //  星盘3.1vh锚定)
 ];
 const SA3_TINT = 0xffcbb1;   // 三星同色 _16/_24/_33 = (1,0.796,0.694)
+const SA3_BASE = new THREE.Color(1, 0.796, 0.694);   // pulse 呼吸的基色(每帧×tint)
 const suns = [];
 for (let i = 0; i < 3; i++) {
   const t = SUNS[i];
@@ -259,10 +263,11 @@ for (let i = 0; i < 3; i++) {
   const sunMat = new THREE.MeshBasicMaterial({ map: sunMap });
   sunMat.color.setRGB(t.hdr[0], t.hdr[1], t.hdr[2]);   // >1:进 HDR 缓冲,泛光阈值0.46同 WE 语义
   const core = new THREE.Mesh(new THREE.SphereGeometry(t.r, 48, 32), sunMat);
-  // sa3 光晕(壁纸原参:alpha 0.59,不旋转,跟随本体)
+  // sa3 星芒(审计#3:材质json blending="translucent"=普通混合,非加色;alpha 0.59,
+  // 色调 _16=(1,.796,.694),不旋转;亮度受 pulse 效果呼吸调制(渲染循环内更新)
   const flare = new THREE.Sprite(new THREE.SpriteMaterial({
     map: flareMap, color: SA3_TINT, transparent: true,
-    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.59
+    depthWrite: false, opacity: 0.59
   }));
   flare.scale.setScalar(t.flareScale);
   g.add(core, flare);
@@ -368,10 +373,13 @@ function planetTint(tem, out) {
   return out;
 }
 
-// 轨迹 ×4(壁纸原式:400 个发光点精灵·每帧一点·尺寸 0.00013→0.0002 线性·透明度线性;
-// 点世界直径=halo 256px×scale → 0.0333→0.0512,柔光珠链)
+// 轨迹 ×4(审计#4,引擎 createLayer 原式):点=models/ta.json 图层(ta.png 32px 白色柔点,
+// 材质 blending="normal" 普通混合非加色);每帧一点,最多 trailLength=400;
+// scale 尾0.0001→头0.0004(引擎 trailStartSize/trailEndSize 平文值)×32px
+// = 世界直径 0.0032→0.0128(旧值 0.0333→0.0512 是按 256px halo+错观距推的,粗了4倍);
+// alpha 尾0→头1 线性;颜色=project.json 四色
 const TRAIL_N = 400;
-const TRAIL_SIZE_A = 256 * 0.00013, TRAIL_SIZE_B = 256 * 0.0002;
+const TRAIL_SIZE_A = 32 * 0.0001, TRAIL_SIZE_B = 32 * 0.0004;
 const TRAIL_COLS = [
   new THREE.Color(1, 1, 1),
   new THREE.Color(1, 0.839, 0.518),
@@ -396,11 +404,10 @@ const TRAIL_VERT =
 const TRAIL_FRAG =
   'varying float vT;\n' +
   'uniform vec3 uColor;\n' +
+  'uniform sampler2D uMap;\n' +
   'void main(){\n' +
-  '  float d = length(gl_PointCoord - 0.5) * 2.0;\n' +
-  '  float fall = max(1.0 - d, 0.0);\n' +
-  '  fall = fall * fall;\n' +
-  '  gl_FragColor = vec4(uColor * vT * fall, 1.0);\n' +
+  '  vec4 t = texture2D(uMap, gl_PointCoord);\n' +      // ta.png:白色柔点(alpha径向)
+  '  gl_FragColor = vec4(uColor * t.rgb, t.a * vT);\n' + // 普通混合:色=层色,α=贴图α×轨迹α
   '}';
 for (let i = 0; i < 4; i++) {
   const geo = new THREE.BufferGeometry();
@@ -409,13 +416,14 @@ for (let i = 0; i < 4; i++) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: TRAIL_COLS[i] },
+      uMap: { value: taMap },
       uPxScale: { value: 1000 },
       uSizeA: { value: TRAIL_SIZE_A },
       uSizeB: { value: TRAIL_SIZE_B }
     },
     vertexShader: TRAIL_VERT,
     fragmentShader: TRAIL_FRAG,
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+    transparent: true, depthWrite: false    // 材质json blending="normal"(默认普通混合)
   });
   const pts = new THREE.Points(geo, mat);
   pts.frustumCulled = false;
@@ -501,30 +509,15 @@ let compassA = 0;
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-// WE 内置 HDR 泛光(scene.general 原值):threshold=0.46 直接作用于 HDR 亮度
-// (恒星盘面 2-3,超出量 1.5-2.5 → 红/金星同样有紧贴光晕);scatter=2→大半径;
-// 强度为 WE/Unreal 量纲差的唯一标定项(对照桌面光晕)
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 1.2, 0.8, 0.46));
-
-// HDR→显示 色调映射(WE hdr:true 的显示端;ACES 近似,保 HDR 盘面纹理对比)
-const tonemapPass = new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, uExposure: { value: 1.15 } },
-  vertexShader:
-    'varying vec2 vUv;\n' +
-    'void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader:
-    'varying vec2 vUv;\n' +
-    'uniform sampler2D tDiffuse;\n' +
-    'uniform float uExposure;\n' +
-    'vec3 aces(vec3 x){\n' +
-    '  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n' +
-    '}\n' +
-    'void main(){\n' +
-    '  vec4 c = texture2D(tDiffuse, vUv);\n' +
-    '  gl_FragColor = vec4(aces(c.rgb * uExposure), c.a);\n' +
-    '}'
-});
-composer.addPass(tonemapPass);
+// WE HDR 泛光(scene.general 原值,审计#2):threshold=0.46 + feather=0.88
+// (宽软膝,直接写入 Unreal 高通的 smoothWidth → 亮度 0.46~1.34 平滑进入泛光),
+// iterations=6/scatter=2 → radius=1.0 宽散射;strength 为 WE↔Unreal 唯一量纲标定值。
+// 原自创 ACES(exposure1.15)色调映射已删——WE hdr 显示端为线性直出(clamp),
+// 此前"盘面调亮2-3×再靠ACES压回"的补偿链一并废除
+const BLOOM_STRENGTH = 0.7;
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), BLOOM_STRENGTH, 1.0, 0.46);
+bloomPass.highPassUniforms['smoothWidth'].value = 0.88;
+composer.addPass(bloomPass);
 
 // godrays 移植(effects/godrays 解码:方向π·强度0.3·阈值0.45,含原版的噪声调制预处理)
 const godraysPass = new ShaderPass({
@@ -801,6 +794,13 @@ function frame() {
     suns[i].core.rotation.y += kTumble * Math.random();
     suns[i].core.rotation.x += kTumble * Math.random();
   }
+  // sa3 pulse 呼吸(sa3 层挂载的 pulse 效果原参:speed=1.37/power=0.89/噪声0.38@0.35,
+  // 亮度乘性调制 tint 0.1137↔0.8235;原版为逐像素空间噪声,此处平滑时间噪声近似,
+  // 三星同相位=原版 phase=0 同源)
+  const pb = Math.pow(0.5 + 0.5 * Math.sin(runT * 1.37), 0.89);
+  const pn = 0.5 + 0.35 * Math.sin(runT * 0.35 * 6.2832) + 0.15 * Math.sin(runT * 0.35 * 17.0 + 1.3);
+  const pt = 0.1137 + (0.8235 - 0.1137) * Math.min(1, Math.max(0, pb + 0.38 * (pn - 0.5)));
+  for (const s of suns) s.flare.material.color.copy(SA3_BASE).multiplyScalar(pt);
   planetG.position.set(B[3].x - com.x, B[3].y - com.y, B[3].z - com.z);
   planetBall.rotation.y += kTumble * Math.random();
   planetBall.rotation.x -= kTumble * Math.random();
