@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>三体实时演算 | Three-Body Problem</title>
+<meta name="description" content="Wallpaper Engine「三体实时演算」壁纸(作者 SYKM)的浏览器 1:1 复刻:四体引力实时演算 + 文明纪年系统。" />
+<link rel="stylesheet" href="css/santi.css" />
+</head>
+<body>
+
+<canvas id="gl"></canvas>
+
+<!-- HUD(壁纸主界面) -->
+<div id="hud">
+  <div class="log-block" id="logBlock"></div>
+  <div class="state-block">
+    <div id="hEra">乱纪元</div>
+    <div id="hState">State : 脱水</div>
+    <div id="hTemp">表面温度 : <span class="v" id="hTempV">--.--</span>°C</div>
+  </div>
+  <div id="hYears">0.00 Years</div>
+  <button id="recenterBtn" type="button">回正</button>
+</div>
+
+<!-- 系统启动/重启遮罩 -->
+<div id="boot">
+  <div class="boot-spin-wrap">
+    <img class="boot-ring" src="assets/wp/ui/2y.png" alt="" />
+    <img class="boot-spinner" id="bootSpinner" src="assets/wp/ui/LOAD.png" alt="" />
+  </div>
+  <div class="boot-status" id="bootStatus">系统启动中</div>
+</div>
+
+<a class="back-home" href="index.html">THREE-BODY · SITE</a>
+
+<script type="importmap">
+{ "imports": { "three": "./js/vendor/three.module.js" } }
+</script>
+<script type="module" src="js/santi.js"></script>
+</body>
+</html>

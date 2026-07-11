@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>水滴 | Droplet · Three-Body</title>
+<meta name="description" content="Wallpaper Engine「水滴 三体 | Droplet」壁纸(作者 SYKM)的浏览器 1:1 复刻:光速星流隧道 + 纯镜面水滴探测器 + 钟慢公式。" />
+<link rel="stylesheet" href="css/droplet.css" />
+</head>
+<body>
+
+<canvas id="gl"></canvas>
+
+<!-- 屏幕文字层(壁纸时间组件,不随世界旋转) -->
+<div id="hud">
+  <div id="eraLine"></div>
+  <div id="clockWrap"><span id="clk"></span><span id="ampm"></span></div>
+  <div id="formula">
+    <span class="feq">Δt=γΔτ=</span>
+    <span class="frac">
+      <span class="num">1</span>
+      <span class="den"><span class="rt">√</span><span class="rad">1 - (<span id="beta">0.123</span>)<sup>2</sup></span></span>
+    </span>
+    <span class="ftau">Δτ</span>
+  </div>
+</div>
+
+<!-- 开场:黑幕 + 署名 + 引言 -->
+<div id="blackout"></div>
+<div id="credits">
+  <div id="logoSYKM">S&emsp;Y&emsp;K&emsp;M</div>
+  <div id="quoteCN">弱小和无知不是生存的障碍，傲慢才是</div>
+  <div id="quoteEN">Weakness and ignorance are not obstacles to survival, but arrogance is.</div>
+  <div id="titleCN">《三体Ⅱ·黑暗森林》</div>
+  <div id="titleEN">The Dark Forest</div>
+</div>
+
+<button id="audioBtn" type="button" title="BGM: Melodysheep - First Moments">♪</button>
+<a class="back-home" href="index.html">THREE-BODY · SITE</a>
+
+<script type="importmap">
+{ "imports": { "three": "./js/vendor/three.module.js" } }
+</script>
+<script type="module" src="js/droplet.js"></script>
+</body>
+</html>
