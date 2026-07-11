@@ -159,6 +159,10 @@ void mainImage(out vec4 fc,in vec2 frag){
     vec2 sc=(512.0/iResolution.xy)*.4;
     vec2 uv=(frag-C)*sc,off=vec2(uBeamXFrac*iResolution.x*sc.x,uBeamYFrac*iResolution.y*sc.y);
     vec2 uvc = uv - off;
+    // 站点定制·波动:光束随高度轻微摆动(基部锚定不摆)+整体呼吸,由 iTime 驱动
+    float sway = sin(uvc.y*0.12 - iTime*1.4) + 0.5*sin(uvc.y*0.05 + iTime*0.8);
+    uvc.x += sway * 1.5 * smoothstep(0.0, 45.0, uvc.y);
+    float breathe = 0.9 + 0.1*sin(iTime*0.7);
     float a=0.0,b=0.0;
     float basePhase=1.5*PI+uDecay*.5; float tauMin=basePhase-uDecay; float tauMax=basePhase;
     float cx=clamp(uvc.x/(R_H*uHLenFactor),-1.0,1.0),tH=clamp(TWO_PI-acos(cx),tauMin,tauMax);
@@ -183,7 +187,7 @@ void mainImage(out vec4 fc,in vec2 frag){
         b+=wt*bsa(uvc,p,mask*env,sig);
     }
     float sPix=clamp(yPix/R_V,0.0,1.0),topA=pow(1.0-smoothstep(TOP_FADE_START,1.0,sPix),TOP_FADE_EXP);
-    float L=a+b*topA;
+    float L=(a+b*topA)*breathe;
     float w=vWisps(vec2(uvc.x,yPix),topA);
     float fog=0.0;
 #if FOG_ON
