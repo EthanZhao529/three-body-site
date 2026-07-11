@@ -68,7 +68,8 @@ export default function App() {
             twinkleIntensity={0.35}
             starSpeed={0.35}
             rotationSpeed={0.05}
-            mouseRepulsion={false}
+            mouseRepulsion={true}
+            repulsionStrength={2}
             mouseInteraction={true}
           />
         </div>

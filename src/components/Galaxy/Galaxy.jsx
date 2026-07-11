@@ -290,21 +290,24 @@ export default function Galaxy({
       targetMouseActive.current = 1.0;
     }
 
-    function handleMouseLeave() {
+    function handleMouseLeave(e) {
+      if (e && e.relatedTarget) return;   // 仅在鼠标离开窗口时熄灭
       targetMouseActive.current = 0.0;
     }
 
+    // 定制:监听挂 window 而非容器——本站星空作全屏底层背景,上方内容层
+    // 会拦截指针事件,挂容器上交互永远收不到;坐标仍按容器矩形归一
     if (mouseInteraction) {
-      ctn.addEventListener('mousemove', handleMouseMove);
-      ctn.addEventListener('mouseleave', handleMouseLeave);
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseout', handleMouseLeave);
     }
 
     return () => {
       cancelAnimationFrame(animateId);
       window.removeEventListener('resize', resize);
       if (mouseInteraction) {
-        ctn.removeEventListener('mousemove', handleMouseMove);
-        ctn.removeEventListener('mouseleave', handleMouseLeave);
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseout', handleMouseLeave);
       }
       ctn.removeChild(gl.canvas);
       gl.getExtension('WEBGL_lose_context')?.loseContext();
