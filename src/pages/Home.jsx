@@ -1,77 +1,22 @@
 import { useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import SplitText from '../components/SplitText/SplitText';
-import DecryptedText from '../components/DecryptedText/DecryptedText';
+import { Link } from 'react-router-dom';
 import TextType from '../components/TextType/TextType';
-import MagicBento from '../components/MagicBento/MagicBento';
 import LaserFlow from '../components/LaserFlow/LaserFlow';
 
-// 卡片标题:悬停乱码重解(DecryptedText,字符集=三体电波风)
-const dTitle = t => (
-  <DecryptedText
-    text={t}
-    animateOn="hover"
-    sequential
-    speed={80}
-    characters="01三体智子乱紀元恒·+-×"
-    parentClassName="inline-block cursor-default"
-    encryptedClassName="text-[#97C3FF]/70"
-  />
-);
-
-// Bento 槽位:第 3、4 张为 2×2 大卡(组件内置网格),演算放 3、黑暗森林放 4
-// 用色规则:金=行动/焦点(演算大卡),蓝=信息(其余);to=站内路由,href=独立全屏页
-const CARDS = [
+// 隐匿入口(黑暗森林式:光标扫过才显现,显现处即可点击;金=行动/演算,蓝=信息)
+const SECTOR_CARDS = [
+  { label: 'FLEET', title: '星际舰队', desc: '末日之战前,人类最后的无敌舰队', to: '/fleet' },
+  { label: 'CHAOTIC ERA', title: '乱纪元', desc: '脱水!三日凌空下的文明轮回', to: '/chaos' },
   {
-    color: '#080d18',
-    label: 'FLEET',
-    labelColor: '#97C3FF',
-    title: dTitle('星际舰队'),
-    description: '末日之战前,人类最后的无敌舰队',
-    to: '/fleet'
-  },
-  {
-    color: '#080d18',
-    label: 'CHAOTIC ERA',
-    labelColor: '#97C3FF',
-    title: dTitle('乱纪元'),
-    description: '脱水!三日凌空下的文明轮回',
-    to: '/chaos'
-  },
-  {
-    color: '#0A0D14',
     label: 'SIMULATION · LIVE',
-    labelColor: '#FFA26A',
-    borderColor: '#7A5A40',
-    title: dTitle('三体实时演算'),
-    description:
-      '四体引力实时演算 · 恒纪元与乱纪元 · 文明纪年系统。已上线,点击进入全屏宇宙。',
-    href: './santi.html'
+    title: '三体实时演算',
+    desc: '四体引力实时演算,点击进入全屏宇宙',
+    href: './santi.html',
+    gold: true
   },
-  {
-    color: '#080d18',
-    label: 'DARK FOREST',
-    labelColor: '#97C3FF',
-    title: dTitle('黑暗森林'),
-    description: '宇宙社会学两公理:生存是文明的第一需要',
-    to: '/dark-forest'
-  },
-  {
-    color: '#080d18',
-    label: 'DROPLET',
-    labelColor: '#97C3FF',
-    title: dTitle('水滴'),
-    description: '强相互作用力宇宙探测器,绝对光滑的镜面',
-    to: '/droplet'
-  },
-  {
-    color: '#080d18',
-    label: 'DUAL VECTOR FOIL',
-    labelColor: '#97C3FF',
-    title: dTitle('二向箔'),
-    description: '降维打击:这是曼妙的死亡',
-    to: '/2d-foil'
-  }
+  { label: 'DARK FOREST', title: '黑暗森林', desc: '生存是文明的第一需要', to: '/dark-forest' },
+  { label: 'DROPLET', title: '水滴', desc: '绝对光滑的强互作用力宇宙探测器', to: '/droplet' },
+  { label: 'DUAL VECTOR FOIL', title: '二向箔', desc: '降维打击:这是曼妙的死亡', to: '/2d-foil' }
 ];
 
 const QUOTES = [
@@ -81,30 +26,75 @@ const QUOTES = [
   '我们都是阴沟里的虫子,但总还是得有人仰望星空。'
 ];
 
-export default function Home() {
-  const navigate = useNavigate();
-  const revealImgRef = useRef(null);
-  // 站内卡片走客户端路由(不整页刷新);演算大卡保留 href 硬跳独立页
-  const cards = CARDS.map(c => (c.to ? { ...c, onClick: () => navigate(c.to) } : c));
+// 显影遮罩:以光标为圆心,中心全亮向外 320px 渐隐(卡片尺度比官方图片版放大一档)
+const REVEAL_MASK =
+  'radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,1) 0px, rgba(255,255,255,0.95) 80px, rgba(255,255,255,0.6) 160px, rgba(255,255,255,0.25) 240px, rgba(255,255,255,0) 320px)';
 
+function CardBody({ c }) {
   return (
     <>
-      {/* ===== Hero(标题字体=未来荧黑宽体重黑+Orbitron,影视片头感) ===== */}
-      <header className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 text-center">
+      <span
+        className={`font-tech text-[10px] tracking-[0.2em] ${c.gold ? 'text-[#FFA26A]' : 'text-[#97C3FF]'}`}
+      >
+        {c.label}
+      </span>
+      <span className="mt-1 block font-santi text-base text-white md:text-lg">{c.title}</span>
+      <span className="mt-0.5 block truncate font-body text-xs text-[#8A93A8]">{c.desc}</span>
+    </>
+  );
+}
+
+export default function Home() {
+  const cardsLayerRef = useRef(null);
+
+  // 光标位置写入卡片层坐标系(官方 Box 示例的显影交互,显影对象换成入口卡片)
+  const handleMove = e => {
+    const el = cardsLayerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--mx', `${e.clientX - r.left}px`);
+    el.style.setProperty('--my', `${e.clientY - r.top}px`);
+  };
+  const handleLeave = () => {
+    const el = cardsLayerRef.current;
+    if (!el) return;
+    el.style.setProperty('--mx', '-9999px');
+    el.style.setProperty('--my', '-9999px');
+  };
+
+  const cardCls = gold =>
+    `pointer-events-auto block rounded-xl border bg-[#060010]/85 px-4 py-3 transition-colors duration-200 ${
+      gold
+        ? 'border-[#7A5A40] hover:border-[#FFA26A] hover:bg-[#0B0906]'
+        : 'border-[#16233f] hover:border-[#97C3FF] hover:bg-[#0a1020]'
+    }`;
+
+  return (
+    <section className="relative h-dvh overflow-hidden" onMouseMove={handleMove} onMouseLeave={handleLeave}>
+      {/* 激光:页面底部,焦点(0.5−0.15=0.35H)落在隐匿卡片区上缘 */}
+      <div
+        className="absolute inset-x-0 bottom-0 h-[62vh]"
+        style={{
+          maskImage: 'linear-gradient(to bottom, transparent 0%, black 16%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 16%)'
+        }}
+      >
+        <LaserFlow color="#97C3FF" horizontalBeamOffset={0} verticalBeamOffset={0.15} />
+      </div>
+
+      {/* ===== Hero(标题为烘焙图像:无边界、不可选中、不可拖拽) ===== */}
+      <div className="pointer-events-none relative z-10 flex select-none flex-col items-center gap-5 px-6 pt-[15vh] text-center">
         <p className="font-orbit text-sm font-bold tracking-[0.6em] text-white/90 [text-shadow:0_0_18px_rgba(151,195,255,0.4)]">
           THREE-BODY UNIVERSE
         </p>
-        <SplitText
-          text="三体宇宙"
-          tag="h1"
-          className="font-title text-6xl leading-tight md:text-8xl [text-shadow:0_0_28px_rgba(151,195,255,0.45),0_0_90px_rgba(151,195,255,0.18)]"
-          delay={120}
-          duration={1.1}
-          from={{ opacity: 0, y: 60 }}
-          to={{ opacity: 1, y: 0 }}
+        <img
+          src={`${import.meta.env.BASE_URL}assets/title.webp`}
+          alt="三体宇宙"
+          draggable={false}
+          className="title-rise w-[min(92vw,574px)] select-none"
         />
         {/* 滚动名句:字体与颜色与主标题同步 */}
-        <div className="mt-2 h-8 font-title text-base text-white md:text-lg [text-shadow:0_0_18px_rgba(151,195,255,0.35)]">
+        <div className="h-8 font-title text-base text-white md:text-lg [text-shadow:0_0_18px_rgba(151,195,255,0.35)]">
           <TextType
             text={QUOTES}
             typingSpeed={80}
@@ -113,95 +103,38 @@ export default function Home() {
             cursorCharacter="_"
           />
         </div>
-        <a
-          href="#universe"
-          className="mt-10 animate-bounce font-tech text-2xl text-white/40"
-          aria-label="向下滚动"
-        >
-          ↓
-        </a>
-      </header>
+      </div>
 
-      {/* ===== 宇宙图景:LaserFlow 激光打在卡片容器顶边(React Bits Box 样式) ===== */}
-      {/* 激光焦点距画布顶 = 画布高×(0.5−verticalBeamOffset)=0.7H,section 的 pt 与之对齐 */}
-      <section
-        id="universe"
-        className="relative pb-24 pt-[434px] md:pt-[476px]"
-        onMouseMove={e => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const el = revealImgRef.current;
-          if (el) {
-            el.style.setProperty('--mx', `${e.clientX - rect.left}px`);
-            el.style.setProperty('--my', `${e.clientY - rect.top}px`);
-          }
-        }}
-        onMouseLeave={() => {
-          const el = revealImgRef.current;
-          if (el) {
-            el.style.setProperty('--mx', '-9999px');
-            el.style.setProperty('--my', '-9999px');
-          }
-        }}
-      >
+      {/* ===== 隐匿入口:光标扫过显现(触屏降级常显,见 index.css .reveal-mask) ===== */}
+      <div className="absolute inset-x-0 bottom-0 z-[6] flex flex-col justify-end pb-[4vh]">
+        <p className="mb-3 select-none text-center font-tech text-xs tracking-[0.4em] text-white/25 [@media(hover:none)]:hidden">
+          SCAN THE DARK FOREST · 光标扫过显现隐匿坐标
+        </p>
         <div
-          className="absolute inset-x-0 top-0 h-[620px] md:h-[680px]"
+          ref={cardsLayerRef}
+          className="reveal-mask pointer-events-none mx-auto grid w-full max-w-6xl grid-cols-2 gap-3 px-4 md:grid-cols-3 md:gap-4"
           style={{
-            maskImage: 'linear-gradient(to bottom, transparent 0%, black 7%, black 80%, transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 7%, black 80%, transparent 100%)'
-          }}
-        >
-          <LaserFlow color="#97C3FF" horizontalBeamOffset={0.1} verticalBeamOffset={-0.2} />
-        </div>
-
-        {/* 官方 Box 示例的悬停显影层:鼠标扫过激光区时以光标为圆心显现银河(照亮混合) */}
-        <img
-          ref={revealImgRef}
-          src={`${import.meta.env.BASE_URL}assets/wp/galaxy-reveal.jpg`}
-          alt=""
-          aria-hidden="true"
-          loading="lazy"
-          className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-[620px] w-full object-cover md:h-[680px]"
-          style={{
-            mixBlendMode: 'lighten',
-            opacity: 0.3,
             '--mx': '-9999px',
             '--my': '-9999px',
-            WebkitMaskImage:
-              'radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,1) 0px, rgba(255,255,255,0.95) 60px, rgba(255,255,255,0.6) 120px, rgba(255,255,255,0.25) 180px, rgba(255,255,255,0) 240px)',
-            maskImage:
-              'radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,1) 0px, rgba(255,255,255,0.95) 60px, rgba(255,255,255,0.6) 120px, rgba(255,255,255,0.25) 180px, rgba(255,255,255,0) 240px)',
-            WebkitMaskRepeat: 'no-repeat',
-            maskRepeat: 'no-repeat'
-          }}
-        />
-
-        {/* 卡片容器:顶边正对激光焦点,边框/辉光与激光同色,内衬点阵 */}
-        <div
-          className="relative z-[6] mx-4 max-w-6xl rounded-[20px] border-2 border-[#97C3FF] bg-[#060010] px-4 py-10 shadow-[0_0_30px_rgba(151,195,255,0.45)] md:px-8 xl:mx-auto"
-          style={{
-            backgroundImage: 'radial-gradient(rgba(151,195,255,0.13) 1px, transparent 1px)',
-            backgroundSize: '26px 26px'
+            maskImage: REVEAL_MASK,
+            WebkitMaskImage: REVEAL_MASK,
+            maskRepeat: 'no-repeat',
+            WebkitMaskRepeat: 'no-repeat'
           }}
         >
-          <h2 className="mb-3 text-center font-santi text-3xl md:text-4xl">宇宙图景</h2>
-          <p className="mb-10 text-center font-tech text-sm tracking-[0.35em] text-white/45">
-            SELECT A SECTOR
-          </p>
-          <MagicBento
-            cards={cards}
-            textAutoHide={false}
-            enableStars
-            enableSpotlight
-            enableBorderGlow
-            enableTilt={false}
-            enableMagnetism
-            clickEffect
-            spotlightRadius={320}
-            particleCount={8}
-            glowColor="151, 195, 255"
-          />
+          {SECTOR_CARDS.map(c =>
+            c.href ? (
+              <a key={c.label} href={c.href} className={cardCls(c.gold)}>
+                <CardBody c={c} />
+              </a>
+            ) : (
+              <Link key={c.label} to={c.to} className={cardCls(c.gold)}>
+                <CardBody c={c} />
+              </Link>
+            )
+          )}
         </div>
-      </section>
-    </>
+      </div>
+    </section>
   );
 }

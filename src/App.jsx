@@ -93,13 +93,15 @@ function Chrome() {
           </Routes>
         </main>
 
-        {/* ===== 页脚 ===== */}
-        <footer className="relative z-10 border-t border-white/10 px-6 py-10 text-center">
-          <p className="font-body text-sm text-[#ffcbb1]/60">给岁月以文明,而不是给文明以岁月。</p>
-          <p className="mt-2 font-tech text-xs tracking-[0.3em] text-white/30">
-            © 2026 THREE-BODY · SITE
-          </p>
-        </footer>
+        {/* ===== 页脚(首页为单屏沉浸布局,不展示) ===== */}
+        {location.pathname !== '/' && (
+          <footer className="relative z-10 border-t border-white/10 px-6 py-10 text-center">
+            <p className="font-body text-sm text-[#ffcbb1]/60">给岁月以文明,而不是给文明以岁月。</p>
+            <p className="mt-2 font-tech text-xs tracking-[0.3em] text-white/30">
+              © 2026 THREE-BODY · SITE
+            </p>
+          </footer>
+        )}
       </div>
     </ClickSpark>
   );

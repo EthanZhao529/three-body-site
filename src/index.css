@@ -38,6 +38,23 @@
   overflow: hidden;
 }
 
+/* ==== 首页 ==== */
+/* 标题图入场(标题已烘焙为图像,整体淡入上升) */
+@keyframes title-rise {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.title-rise {
+  animation: title-rise 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* 触屏无 hover:隐匿入口降级为常显 */
+@media (hover: none) {
+  .reveal-mask {
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+  }
+}
+
 /* ==== 全站基调 ==== */
 /* 正文=系统黑体栈(耐读、零加载);标题类元素各自标 font-santi(铁线黑) */
 html,
