@@ -642,7 +642,7 @@ const MagicBento = ({
 
             const cardStyle = {
               backgroundColor: card.color || 'var(--background-dark)',
-              borderColor: 'var(--border-color)',
+              borderColor: card.borderColor || 'var(--border-color)',
               color: 'var(--white)',
               '--glow-x': '50%',
               '--glow-y': '50%',
@@ -665,14 +665,14 @@ const MagicBento = ({
                   onClick={card.href ? () => { window.location.href = card.href; } : undefined}
                 >
                   <div className="card__header flex justify-between gap-3 relative text-white">
-                    <span className="card__label text-base">{card.label}</span>
+                    <span className="card__label font-tech text-xs tracking-[0.18em]" style={{ color: card.labelColor }}>{card.label}</span>
                   </div>
                   <div className="card__content flex flex-col relative text-white">
-                    <h3 className={`card__title font-normal text-base m-0 mb-1 ${textAutoHide ? 'text-clamp-1' : ''}`}>
+                    <h3 className={`card__title font-santi font-normal text-lg m-0 mb-1 ${textAutoHide ? 'text-clamp-1' : ''}`}>
                       {card.title}
                     </h3>
                     <p
-                      className={`card__description text-xs leading-5 opacity-90 ${textAutoHide ? 'text-clamp-2' : ''}`}
+                      className={`card__description font-body text-xs leading-5 text-[#8A93A8] ${textAutoHide ? 'text-clamp-2' : ''}`}
                     >
                       {card.description}
                     </p>
@@ -797,13 +797,13 @@ const MagicBento = ({
                 }}
               >
                 <div className="card__header flex justify-between gap-3 relative text-white">
-                  <span className="card__label text-base">{card.label}</span>
+                  <span className="card__label font-tech text-xs tracking-[0.18em]" style={{ color: card.labelColor }}>{card.label}</span>
                 </div>
                 <div className="card__content flex flex-col relative text-white">
-                  <h3 className={`card__title font-normal text-base m-0 mb-1 ${textAutoHide ? 'text-clamp-1' : ''}`}>
+                  <h3 className={`card__title font-santi font-normal text-lg m-0 mb-1 ${textAutoHide ? 'text-clamp-1' : ''}`}>
                     {card.title}
                   </h3>
-                  <p className={`card__description text-xs leading-5 opacity-90 ${textAutoHide ? 'text-clamp-2' : ''}`}>
+                  <p className={`card__description font-body text-xs leading-5 text-[#8A93A8] ${textAutoHide ? 'text-clamp-2' : ''}`}>
                     {card.description}
                   </p>
                 </div>

@@ -34,6 +34,7 @@ uniform float uRepulsionStrength;
 uniform float uMouseActiveFactor;
 uniform float uAutoCenterRepulsion;
 uniform bool uTransparent;
+uniform float uStarScale;
 
 varying vec2 vUv;
 
@@ -69,6 +70,7 @@ vec3 hsv2rgb(vec3 c) {
 }
 
 float Star(vec2 uv, float flare) {
+  uv /= uStarScale;   // 定制:星点整体缩放旋钮(<1 更小更细腻)
   float d = length(uv);
   float m = (0.05 * uGlowIntensity) / d;
   float rays = smoothstep(0.0, 1.0, 1.0 - abs(uv.x * uv.y * 1000.0));
@@ -186,6 +188,7 @@ export default function Galaxy({
   rotationSpeed = 0.1,
   autoCenterRepulsion = 0,
   transparent = true,
+  starScale = 1,     // 定制:星点尺寸旋钮
   ...rest
 }) {
   const ctnDom = useRef(null);
@@ -253,7 +256,8 @@ export default function Galaxy({
         uRepulsionStrength: { value: repulsionStrength },
         uMouseActiveFactor: { value: 0.0 },
         uAutoCenterRepulsion: { value: autoCenterRepulsion },
-        uTransparent: { value: transparent }
+        uTransparent: { value: transparent },
+        uStarScale: { value: starScale }
       }
     });
 
