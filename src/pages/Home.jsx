@@ -82,40 +82,75 @@ const QUOTES = [
 const REVEAL_MASK =
   'radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,1) 0px, rgba(255,255,255,0.95) 80px, rgba(255,255,255,0.6) 160px, rgba(255,255,255,0.25) 240px, rgba(255,255,255,0) 320px)';
 
-// 卡片内衬:扫描线纹理 + 纵向暗渐变(HUD 面板质感)
-const cardBg = gold => ({
+// 机甲切角面板(右上/左下 45° 切角)
+const PANEL_CUT =
+  'polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px))';
+
+// 面板内衬:扫描线 + 纵向暗渐变
+const panelBg = gold => ({
+  clipPath: PANEL_CUT,
   backgroundImage: gold
-    ? 'repeating-linear-gradient(0deg, rgba(255,162,106,0.035) 0 1px, transparent 1px 3px), linear-gradient(to bottom, rgba(20,16,10,0.92), rgba(7,5,3,0.92))'
-    : 'repeating-linear-gradient(0deg, rgba(151,195,255,0.035) 0 1px, transparent 1px 3px), linear-gradient(to bottom, rgba(8,17,32,0.92), rgba(4,7,13,0.92))'
+    ? 'repeating-linear-gradient(0deg, rgba(255,162,106,0.04) 0 1px, transparent 1px 3px), linear-gradient(to bottom, rgba(22,17,10,0.94), rgba(8,6,3,0.94))'
+    : 'repeating-linear-gradient(0deg, rgba(151,195,255,0.04) 0 1px, transparent 1px 3px), linear-gradient(to bottom, rgba(9,18,34,0.94), rgba(4,7,13,0.94))'
 });
 
-function CardBody({ c }) {
+// 机甲 HUD 卡:切角边框层+面板层+状态灯+幽灵编号水印+斜纹警示条
+function SectorCard({ c }) {
   const accent = c.gold ? '#FFA26A' : '#97C3FF';
-  return (
+  const edge = c.gold ? 'rgba(122,90,64,0.85)' : 'rgba(37,63,110,0.85)';
+  const cls = `group pointer-events-auto relative block transition-all duration-200 ${
+    c.gold
+      ? 'hover:drop-shadow-[0_0_14px_rgba(255,162,106,0.45)]'
+      : 'hover:drop-shadow-[0_0_14px_rgba(151,195,255,0.4)]'
+  }`;
+  const inner = (
     <>
-      {/* 瞄准框角标 */}
       <span
         aria-hidden="true"
-        className="absolute left-0 top-0 h-2.5 w-2.5 border-l-2 border-t-2"
-        style={{ borderColor: accent }}
+        className="absolute inset-0 opacity-70 transition-opacity duration-200 group-hover:opacity-100"
+        style={{ clipPath: PANEL_CUT, background: edge }}
       />
-      <span
-        aria-hidden="true"
-        className="absolute bottom-0 right-0 h-2.5 w-2.5 border-b-2 border-r-2"
-        style={{ borderColor: accent }}
-      />
-      <div className="flex items-baseline justify-between gap-2 border-b border-white/10 pb-1.5">
-        <span className="font-tech text-[10px] tracking-[0.25em]" style={{ color: accent }}>
-          {c.label}
+      <span aria-hidden="true" className="absolute inset-px" style={panelBg(c.gold)} />
+      <span className="relative block px-4 pb-4 pt-2.5" style={{ clipPath: PANEL_CUT }}>
+        {/* 幽灵编号水印(机体涂装) */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-1 right-4 select-none font-orbit text-5xl font-black leading-none text-white/[0.06]"
+        >
+          {c.code}
         </span>
-        <span className="font-tech text-[9px] tracking-[0.2em] text-white/35">SEC·{c.code}</span>
-      </div>
-      <div className="mt-2 font-santi text-base text-white md:text-lg">{dTitle(c.title)}</div>
-      <div className="mt-1 flex items-baseline justify-between gap-2">
-        <span className="truncate font-body text-xs text-[#8A93A8]">{c.desc}</span>
-        <span className="shrink-0 font-tech text-[9px] text-[#5B86C9]">{c.coord}</span>
-      </div>
+        {/* 状态灯 + 标签行 */}
+        <span className="flex items-center gap-2 border-b border-white/10 pb-1.5">
+          <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse" style={{ backgroundColor: accent }} />
+          <span className="font-tech text-[10px] tracking-[0.25em]" style={{ color: accent }}>
+            {c.label}
+          </span>
+          <span className="ml-auto font-tech text-[9px] tracking-[0.2em] text-white/35">
+            SEC·{c.code}
+          </span>
+        </span>
+        <span className="mt-2 block font-santi text-lg text-white md:text-xl">{dTitle(c.title)}</span>
+        <span className="mt-1 flex items-baseline justify-between gap-2">
+          <span className="truncate font-body text-xs text-[#8A93A8]">{c.desc}</span>
+          <span className="shrink-0 font-tech text-[9px] text-[#5B86C9]">{c.coord}</span>
+        </span>
+        {/* 底部斜纹警示条 */}
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-0 bottom-0 h-[3px] opacity-40"
+          style={{ backgroundImage: `repeating-linear-gradient(45deg, ${accent} 0 6px, transparent 6px 12px)` }}
+        />
+      </span>
     </>
+  );
+  return c.href ? (
+    <a href={c.href} className={cls}>
+      {inner}
+    </a>
+  ) : (
+    <Link to={c.to} className={cls}>
+      {inner}
+    </Link>
   );
 }
 
@@ -137,28 +172,15 @@ export default function Home() {
     el.style.setProperty('--my', '-9999px');
   };
 
-  const cardCls = gold =>
-    `pointer-events-auto relative block border px-4 pb-3 pt-2.5 transition-all duration-200 ${
-      gold
-        ? 'border-[#7A5A40]/60 hover:border-[#FFA26A] hover:shadow-[0_0_18px_rgba(255,162,106,0.28)]'
-        : 'border-[#1B2C4D]/70 hover:border-[#97C3FF] hover:shadow-[0_0_18px_rgba(151,195,255,0.28)]'
-    }`;
-
   return (
     <section
       className="relative flex h-dvh flex-col overflow-hidden"
       onMouseMove={handleMove}
       onMouseLeave={handleLeave}
     >
-      {/* 激光:贴页底,焦点(0.5−(−0.43)=0.93H)落在视口约 95vh 处,光束向上升起并波动 */}
-      <div
-        className="absolute inset-x-0 bottom-0 h-[68vh]"
-        style={{
-          maskImage: 'linear-gradient(to bottom, transparent 0%, black 16%)',
-          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 16%)'
-        }}
-      >
-        <LaserFlow color="#97C3FF" horizontalBeamOffset={0} verticalBeamOffset={-0.43} />
+      {/* 激光:页底光之地面,光束居右 70% 处;screen 混合置于隐匿卡片之上(黑=透明,光=叠加) */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[7] h-[68vh] mix-blend-screen">
+        <LaserFlow color="#97C3FF" horizontalBeamOffset={0.2} verticalBeamOffset={-0.43} />
       </div>
 
       {/* ===== Hero(标题为烘焙图像:无边界、不可选中、不可拖拽) ===== */}
@@ -203,17 +225,9 @@ export default function Home() {
             WebkitMaskRepeat: 'no-repeat'
           }}
         >
-          {SECTOR_CARDS.map(c =>
-            c.href ? (
-              <a key={c.label} href={c.href} className={cardCls(c.gold)} style={cardBg(c.gold)}>
-                <CardBody c={c} />
-              </a>
-            ) : (
-              <Link key={c.label} to={c.to} className={cardCls(c.gold)} style={cardBg(c.gold)}>
-                <CardBody c={c} />
-              </Link>
-            )
-          )}
+          {SECTOR_CARDS.map(c => (
+            <SectorCard key={c.label} c={c} />
+          ))}
         </div>
       </div>
     </section>
