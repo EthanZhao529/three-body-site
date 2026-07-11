@@ -6,6 +6,8 @@
   --animate-star-movement-top: star-movement-top linear infinite alternate;
   --font-santi: 'FZTieXHJW', 'Noto Sans SC', sans-serif;
   --font-tech: 'Rajdhani', 'Consolas', monospace;
+  --font-title: 'GlowSansSC Wide', 'FZTieXHJW', 'Noto Sans SC', sans-serif;
+  --font-orbit: 'Orbitron', 'Rajdhani', 'Consolas', monospace;
   --font-body: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
 }
 @keyframes star-movement-bottom {

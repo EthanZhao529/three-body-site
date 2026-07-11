@@ -3,7 +3,7 @@ import SplitText from '../components/SplitText/SplitText';
 import DecryptedText from '../components/DecryptedText/DecryptedText';
 import TextType from '../components/TextType/TextType';
 import MagicBento from '../components/MagicBento/MagicBento';
-import StarBorder from '../components/StarBorder/StarBorder';
+import LaserFlow from '../components/LaserFlow/LaserFlow';
 
 // 卡片标题:悬停乱码重解(DecryptedText,字符集=三体电波风)
 const dTitle = t => (
@@ -87,30 +87,22 @@ export default function Home() {
 
   return (
     <>
-      {/* ===== Hero ===== */}
+      {/* ===== Hero(标题字体=未来荧黑宽体重黑+Orbitron,影视片头感) ===== */}
       <header className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 text-center">
-        <p className="font-tech text-sm tracking-[0.6em] text-[#97c3ff]/70">
+        <p className="font-orbit text-sm font-bold tracking-[0.6em] text-white/90 [text-shadow:0_0_18px_rgba(151,195,255,0.4)]">
           THREE-BODY UNIVERSE
         </p>
         <SplitText
           text="三体宇宙"
           tag="h1"
-          className="font-santi text-6xl leading-tight md:text-8xl"
+          className="font-title text-6xl leading-tight md:text-8xl [text-shadow:0_0_28px_rgba(151,195,255,0.45),0_0_90px_rgba(151,195,255,0.18)]"
           delay={120}
           duration={1.1}
           from={{ opacity: 0, y: 60 }}
           to={{ opacity: 1, y: 0 }}
         />
-        <DecryptedText
-          text="实时演算 · 黑暗森林 · 降维打击"
-          className="font-santi text-lg text-white/85 md:text-xl"
-          encryptedClassName="font-tech text-lg text-[#97c3ff]/50 md:text-xl"
-          animateOn="view"
-          sequential
-          speed={70}
-          characters="01三体智子乱紀元恒·+-×"
-        />
-        <div className="mt-2 h-8 font-body text-base text-[#FFCBB1] md:text-lg">
+        {/* 滚动名句:字体与颜色与主标题同步 */}
+        <div className="mt-2 h-8 font-title text-base text-white md:text-lg [text-shadow:0_0_18px_rgba(151,195,255,0.35)]">
           <TextType
             text={QUOTES}
             typingSpeed={80}
@@ -119,18 +111,6 @@ export default function Home() {
             cursorCharacter="_"
           />
         </div>
-        <StarBorder
-          as="a"
-          href="./santi.html"
-          color="#FFA26A"
-          speed="5s"
-          thickness={2}
-          className="mt-6"
-        >
-          <span className="block bg-[#0B0906] px-10 py-4 font-santi text-lg text-[#FFCBB1] rounded-[18px] border border-[#FFA26A]/70">
-            进入三体实时演算 →
-          </span>
-        </StarBorder>
         <a
           href="#universe"
           className="mt-10 animate-bounce font-tech text-2xl text-white/40"
@@ -140,25 +120,45 @@ export default function Home() {
         </a>
       </header>
 
-      {/* ===== 宇宙图景(入口卡片阵) ===== */}
-      <section id="universe" className="mx-auto max-w-6xl px-4 py-24">
-        <h2 className="mb-3 text-center font-santi text-3xl md:text-4xl">宇宙图景</h2>
-        <p className="mb-10 text-center font-tech text-sm tracking-[0.35em] text-white/45">
-          SELECT A SECTOR
-        </p>
-        <MagicBento
-          cards={cards}
-          textAutoHide={false}
-          enableStars
-          enableSpotlight
-          enableBorderGlow
-          enableTilt={false}
-          enableMagnetism
-          clickEffect
-          spotlightRadius={320}
-          particleCount={8}
-          glowColor="151, 195, 255"
-        />
+      {/* ===== 宇宙图景:LaserFlow 激光打在卡片容器顶边(React Bits Box 样式) ===== */}
+      {/* 激光焦点距画布顶 = 画布高×(0.5−verticalBeamOffset)=0.7H,section 的 pt 与之对齐 */}
+      <section id="universe" className="relative pb-24 pt-[434px] md:pt-[476px]">
+        <div
+          className="absolute inset-x-0 top-0 h-[620px] md:h-[680px]"
+          style={{
+            maskImage: 'linear-gradient(to bottom, transparent 0%, black 7%, black 80%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 7%, black 80%, transparent 100%)'
+          }}
+        >
+          <LaserFlow color="#97C3FF" horizontalBeamOffset={0} verticalBeamOffset={-0.2} />
+        </div>
+
+        {/* 卡片容器:顶边正对激光焦点,边框/辉光与激光同色,内衬点阵 */}
+        <div
+          className="relative z-[6] mx-4 max-w-6xl rounded-[20px] border-2 border-[#97C3FF] bg-[#060010] px-4 py-10 shadow-[0_0_30px_rgba(151,195,255,0.45)] md:px-8 xl:mx-auto"
+          style={{
+            backgroundImage: 'radial-gradient(rgba(151,195,255,0.13) 1px, transparent 1px)',
+            backgroundSize: '26px 26px'
+          }}
+        >
+          <h2 className="mb-3 text-center font-santi text-3xl md:text-4xl">宇宙图景</h2>
+          <p className="mb-10 text-center font-tech text-sm tracking-[0.35em] text-white/45">
+            SELECT A SECTOR
+          </p>
+          <MagicBento
+            cards={cards}
+            textAutoHide={false}
+            enableStars
+            enableSpotlight
+            enableBorderGlow
+            enableTilt={false}
+            enableMagnetism
+            clickEffect
+            spotlightRadius={320}
+            particleCount={8}
+            glowColor="151, 195, 255"
+          />
+        </div>
       </section>
     </>
   );

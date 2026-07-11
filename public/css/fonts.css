@@ -9,3 +9,17 @@
   src: url('../assets/wp/fonts/Rajdhani Medium.otf') format('opentype');
   font-display: swap;
 }
+
+/* 首页展示字体(自托管子集,构建于 2026-07:未来荧黑宽体重黑=中文大标题/名句,Orbitron=英文科幻标头)
+   子集仅含首页文案字符,新增文案需重新子集化(fonttools subset,源字体见 welai/glow-sans 与 Google Fonts) */
+@font-face {
+  font-family: 'GlowSansSC Wide';
+  src: url('../fonts/GlowSansSC-Wide-Heavy.subset.woff2') format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Orbitron';
+  src: url('../fonts/Orbitron-var.subset.woff2') format('woff2');
+  font-weight: 400 900;
+  font-display: swap;
+}
