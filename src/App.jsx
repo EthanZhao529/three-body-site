@@ -48,9 +48,9 @@ function Chrome() {
   return (
     <ClickSpark sparkColor="#FFCBB1" sparkRadius={22} sparkCount={8} duration={450}>
       <div className="relative min-h-screen overflow-x-hidden bg-black text-white">
-        {/* 深空背景(轻量星系;真·演算在 santi.html 独立页) */}
+        {/* 深空背景(轻量星系;真·演算在 santi.html 独立页;黑暗森林页要纯黑不渲染) */}
         <div className="fixed inset-0 z-0">
-          <Galaxy
+          {location.pathname !== '/dark-forest' && <Galaxy
             density={1}
             hueShift={210}
             glowIntensity={0.25}
@@ -61,7 +61,7 @@ function Chrome() {
             repulsionStrength={2}
             mouseInteraction={true}
             starScale={0.7}
-          />
+          />}
         </div>
 
         {/* 顶部导航:GooeyNav 与路由双向同步(首页为无 UI 沉浸屏,不展示) */}
