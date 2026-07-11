@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SplitText from '../components/SplitText/SplitText';
 import DecryptedText from '../components/DecryptedText/DecryptedText';
@@ -82,6 +83,7 @@ const QUOTES = [
 
 export default function Home() {
   const navigate = useNavigate();
+  const revealImgRef = useRef(null);
   // 站内卡片走客户端路由(不整页刷新);演算大卡保留 href 硬跳独立页
   const cards = CARDS.map(c => (c.to ? { ...c, onClick: () => navigate(c.to) } : c));
 
@@ -122,7 +124,25 @@ export default function Home() {
 
       {/* ===== 宇宙图景:LaserFlow 激光打在卡片容器顶边(React Bits Box 样式) ===== */}
       {/* 激光焦点距画布顶 = 画布高×(0.5−verticalBeamOffset)=0.7H,section 的 pt 与之对齐 */}
-      <section id="universe" className="relative pb-24 pt-[434px] md:pt-[476px]">
+      <section
+        id="universe"
+        className="relative pb-24 pt-[434px] md:pt-[476px]"
+        onMouseMove={e => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const el = revealImgRef.current;
+          if (el) {
+            el.style.setProperty('--mx', `${e.clientX - rect.left}px`);
+            el.style.setProperty('--my', `${e.clientY - rect.top}px`);
+          }
+        }}
+        onMouseLeave={() => {
+          const el = revealImgRef.current;
+          if (el) {
+            el.style.setProperty('--mx', '-9999px');
+            el.style.setProperty('--my', '-9999px');
+          }
+        }}
+      >
         <div
           className="absolute inset-x-0 top-0 h-[620px] md:h-[680px]"
           style={{
@@ -130,8 +150,30 @@ export default function Home() {
             WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 7%, black 80%, transparent 100%)'
           }}
         >
-          <LaserFlow color="#97C3FF" horizontalBeamOffset={0} verticalBeamOffset={-0.2} />
+          <LaserFlow color="#97C3FF" horizontalBeamOffset={0.1} verticalBeamOffset={-0.2} />
         </div>
+
+        {/* 官方 Box 示例的悬停显影层:鼠标扫过激光区时以光标为圆心显现银河(照亮混合) */}
+        <img
+          ref={revealImgRef}
+          src={`${import.meta.env.BASE_URL}assets/wp/galaxy-reveal.jpg`}
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-[620px] w-full object-cover md:h-[680px]"
+          style={{
+            mixBlendMode: 'lighten',
+            opacity: 0.3,
+            '--mx': '-9999px',
+            '--my': '-9999px',
+            WebkitMaskImage:
+              'radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,1) 0px, rgba(255,255,255,0.95) 60px, rgba(255,255,255,0.6) 120px, rgba(255,255,255,0.25) 180px, rgba(255,255,255,0) 240px)',
+            maskImage:
+              'radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,1) 0px, rgba(255,255,255,0.95) 60px, rgba(255,255,255,0.6) 120px, rgba(255,255,255,0.25) 180px, rgba(255,255,255,0) 240px)',
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat'
+          }}
+        />
 
         {/* 卡片容器:顶边正对激光焦点,边框/辉光与激光同色,内衬点阵 */}
         <div
