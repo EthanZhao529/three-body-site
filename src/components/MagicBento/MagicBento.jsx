@@ -638,7 +638,7 @@ const MagicBento = ({
           {cards.map((card, index) => {
             const baseClassName = `card flex flex-col justify-between relative aspect-[4/3] min-h-[200px] w-full max-w-full p-5 rounded-[20px] border border-solid font-light overflow-hidden transition-colors duration-300 ease-in-out hover:-translate-y-0.5 hover:shadow-[0_8px_25px_rgba(0,0,0,0.15)] ${
               enableBorderGlow ? 'card--border-glow' : ''
-            } ${card.href ? 'cursor-pointer' : ''} ${card.span ? card.span : ''}`;
+            } ${card.href || card.onClick ? 'cursor-pointer' : ''} ${card.span ? card.span : ''}`;
 
             const cardStyle = {
               backgroundColor: card.color || 'var(--background-dark)',
@@ -662,7 +662,7 @@ const MagicBento = ({
                   enableTilt={enableTilt}
                   clickEffect={clickEffect}
                   enableMagnetism={enableMagnetism}
-                  onClick={card.href ? () => { window.location.href = card.href; } : undefined}
+                  onClick={card.onClick ?? (card.href ? () => { window.location.href = card.href; } : undefined)}
                 >
                   <div className="card__header flex justify-between gap-3 relative text-white">
                     <span className="card__label font-tech text-xs tracking-[0.18em]" style={{ color: card.labelColor }}>{card.label}</span>

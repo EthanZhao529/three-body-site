@@ -1,82 +1,50 @@
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Galaxy from './components/Galaxy/Galaxy';
-import SplitText from './components/SplitText/SplitText';
-import DecryptedText from './components/DecryptedText/DecryptedText';
-import TextType from './components/TextType/TextType';
-import MagicBento from './components/MagicBento/MagicBento';
-import StarBorder from './components/StarBorder/StarBorder';
 import ClickSpark from './components/ClickSpark/ClickSpark';
+import GooeyNav from './components/GooeyNav/GooeyNav';
+import Home from './pages/Home';
+import Fleet from './pages/Fleet';
+import Chaos from './pages/Chaos';
+import DarkForest from './pages/DarkForest';
+import Droplet from './pages/Droplet';
+import Foil from './pages/Foil';
 
-// 卡片标题:悬停乱码重解(DecryptedText,字符集=三体电波风)
-const dTitle = t => (
-  <DecryptedText
-    text={t}
-    animateOn="hover"
-    sequential
-    speed={80}
-    characters="01三体智子乱紀元恒·+-×"
-    parentClassName="inline-block cursor-default"
-    encryptedClassName="text-[#97C3FF]/70"
-  />
-);
+// GitHub Pages 项目站点前缀(dev 与线上同为 /three-body-site)
+const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, '');
 
-// Bento 槽位:第 3、4 张为 2×2 大卡(组件内置网格),演算放 3、黑暗森林放 4
-// 用色规则:金=行动/焦点(演算大卡),蓝=信息(其余)
-const CARDS = [
-  {
-    color: '#080d18',
-    label: 'FLEET',
-    labelColor: '#97C3FF',
-    title: dTitle('星际舰队'),
-    description: '末日之战前,人类最后的无敌舰队 —— 建设中'
-  },
-  {
-    color: '#080d18',
-    label: 'CHAOTIC ERA',
-    labelColor: '#97C3FF',
-    title: dTitle('乱纪元'),
-    description: '脱水!三日凌空下的文明轮回 —— 建设中'
-  },
-  {
-    color: '#0A0D14',
-    label: 'SIMULATION · LIVE',
-    labelColor: '#FFA26A',
-    borderColor: '#7A5A40',
-    title: dTitle('三体实时演算'),
-    description:
-      '四体引力实时演算 · 恒纪元与乱纪元 · 文明纪年系统。已上线,点击进入全屏宇宙。',
-    href: './santi.html'
-  },
-  {
-    color: '#080d18',
-    label: 'DARK FOREST',
-    labelColor: '#97C3FF',
-    title: dTitle('黑暗森林'),
-    description: '宇宙社会学两公理:生存是文明的第一需要 —— 建设中'
-  },
-  {
-    color: '#080d18',
-    label: 'DROPLET',
-    labelColor: '#97C3FF',
-    title: dTitle('水滴'),
-    description: '强相互作用力宇宙探测器,绝对光滑的镜面 —— 建设中'
-  },
-  {
-    color: '#080d18',
-    label: 'DUAL VECTOR FOIL',
-    labelColor: '#97C3FF',
-    title: dTitle('二向箔'),
-    description: '降维打击:这是曼妙的死亡 —— 建设中'
-  }
+// 全站分区(导航顺序=叙事顺序;演算是独立全屏页,由 Hero 按钮/演算大卡进入,不进路由)
+const SECTORS = [
+  { label: '首页', to: '/' },
+  { label: '舰队', to: '/fleet' },
+  { label: '乱纪元', to: '/chaos' },
+  { label: '黑暗森林', to: '/dark-forest' },
+  { label: '水滴', to: '/droplet' },
+  { label: '二向箔', to: '/2d-foil' }
 ];
 
-const QUOTES = [
-  '给岁月以文明,而不是给文明以岁月。',
-  '弱小和无知不是生存的障碍,傲慢才是。',
-  '藏好自己,做好清理。',
-  '我们都是阴沟里的虫子,但总还是得有人仰望星空。'
-];
+// 导航粒子用色:蓝为主(信息层)+一点金,与 ClickSpark 呼应
+const NAV_COLORS = {
+  '--color-1': '#97C3FF',
+  '--color-2': '#5B86C9',
+  '--color-3': '#FFCBB1',
+  '--color-4': '#FFFFFF'
+};
 
-export default function App() {
+// 路由切换回到页顶(SPA 默认保留滚动位置)
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
+function Chrome() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activeIndex = Math.max(0, SECTORS.findIndex(s => s.to === location.pathname));
+
   return (
     <ClickSpark sparkColor="#FFCBB1" sparkRadius={22} sparkCount={8} duration={450}>
       <div className="relative min-h-screen overflow-x-hidden bg-black text-white">
@@ -96,90 +64,52 @@ export default function App() {
           />
         </div>
 
+        {/* 顶部导航:GooeyNav 与路由双向同步(点导航→navigate;外部导航→重放粒子过渡) */}
+        <header className="fixed inset-x-0 top-0 z-30 flex justify-center border-b border-white/5 bg-black/30 py-2.5 backdrop-blur-sm">
+          <div className="max-w-full overflow-x-auto px-2 font-santi text-sm" style={NAV_COLORS}>
+            <GooeyNav
+              items={SECTORS.map(s => ({ label: s.label, href: `${BASENAME}${s.to}` }))}
+              activeIndex={activeIndex}
+              initialActiveIndex={activeIndex}
+              onNavigate={i => {
+                if (SECTORS[i].to !== location.pathname) navigate(SECTORS[i].to);
+              }}
+              particleCount={12}
+              particleDistances={[70, 10]}
+              animationTime={500}
+            />
+          </div>
+        </header>
+
         <main className="relative z-10">
-          {/* ===== Hero ===== */}
-          <header className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 text-center">
-            <p className="font-tech text-sm tracking-[0.6em] text-[#97c3ff]/70">
-              THREE-BODY UNIVERSE
-            </p>
-            <SplitText
-              text="三体宇宙"
-              tag="h1"
-              className="font-santi text-6xl leading-tight md:text-8xl"
-              delay={120}
-              duration={1.1}
-              from={{ opacity: 0, y: 60 }}
-              to={{ opacity: 1, y: 0 }}
-            />
-            <DecryptedText
-              text="实时演算 · 黑暗森林 · 降维打击"
-              className="font-santi text-lg text-white/85 md:text-xl"
-              encryptedClassName="font-tech text-lg text-[#97c3ff]/50 md:text-xl"
-              animateOn="view"
-              sequential
-              speed={70}
-              characters="01三体智子乱紀元恒·+-×"
-            />
-            <div className="mt-2 h-8 font-body text-base text-[#FFCBB1] md:text-lg">
-              <TextType
-                text={QUOTES}
-                typingSpeed={80}
-                deletingSpeed={30}
-                pauseDuration={2600}
-                cursorCharacter="_"
-              />
-            </div>
-            <StarBorder
-              as="a"
-              href="./santi.html"
-              color="#FFA26A"
-              speed="5s"
-              thickness={2}
-              className="mt-6"
-            >
-              <span className="block bg-[#0B0906] px-10 py-4 font-santi text-lg text-[#FFCBB1] rounded-[18px] border border-[#FFA26A]/70">
-                进入三体实时演算 →
-              </span>
-            </StarBorder>
-            <a
-              href="#universe"
-              className="mt-10 animate-bounce font-tech text-2xl text-white/40"
-              aria-label="向下滚动"
-            >
-              ↓
-            </a>
-          </header>
-
-          {/* ===== 宇宙图景(入口卡片阵) ===== */}
-          <section id="universe" className="mx-auto max-w-6xl px-4 py-24">
-            <h2 className="mb-3 text-center font-santi text-3xl md:text-4xl">宇宙图景</h2>
-            <p className="mb-10 text-center font-tech text-sm tracking-[0.35em] text-white/45">
-              SELECT A SECTOR
-            </p>
-            <MagicBento
-              cards={CARDS}
-              textAutoHide={false}
-              enableStars
-              enableSpotlight
-              enableBorderGlow
-              enableTilt={false}
-              enableMagnetism
-              clickEffect
-              spotlightRadius={320}
-              particleCount={8}
-              glowColor="151, 195, 255"
-            />
-          </section>
-
-          {/* ===== 页脚 ===== */}
-          <footer className="border-t border-white/10 px-6 py-10 text-center">
-            <p className="font-body text-sm text-[#ffcbb1]/60">给岁月以文明,而不是给文明以岁月。</p>
-            <p className="mt-2 font-tech text-xs tracking-[0.3em] text-white/30">
-              © 2026 THREE-BODY · SITE
-            </p>
-          </footer>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/fleet" element={<Fleet />} />
+            <Route path="/chaos" element={<Chaos />} />
+            <Route path="/dark-forest" element={<DarkForest />} />
+            <Route path="/droplet" element={<Droplet />} />
+            <Route path="/2d-foil" element={<Foil />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </main>
+
+        {/* ===== 页脚 ===== */}
+        <footer className="relative z-10 border-t border-white/10 px-6 py-10 text-center">
+          <p className="font-body text-sm text-[#ffcbb1]/60">给岁月以文明,而不是给文明以岁月。</p>
+          <p className="mt-2 font-tech text-xs tracking-[0.3em] text-white/30">
+            © 2026 THREE-BODY · SITE
+          </p>
+        </footer>
       </div>
     </ClickSpark>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter basename={BASENAME}>
+      <ScrollToTop />
+      <Chrome />
+    </BrowserRouter>
   );
 }
