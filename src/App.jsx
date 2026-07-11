@@ -64,22 +64,24 @@ function Chrome() {
           />
         </div>
 
-        {/* 顶部导航:GooeyNav 与路由双向同步(点导航→navigate;外部导航→重放粒子过渡) */}
-        <header className="fixed inset-x-0 top-0 z-30 flex justify-center border-b border-white/5 bg-black/30 py-2.5 backdrop-blur-sm">
-          <div className="max-w-full overflow-x-auto px-2 font-santi text-sm" style={NAV_COLORS}>
-            <GooeyNav
-              items={SECTORS.map(s => ({ label: s.label, href: `${BASENAME}${s.to}` }))}
-              activeIndex={activeIndex}
-              initialActiveIndex={activeIndex}
-              onNavigate={i => {
-                if (SECTORS[i].to !== location.pathname) navigate(SECTORS[i].to);
-              }}
-              particleCount={12}
-              particleDistances={[70, 10]}
-              animationTime={500}
-            />
-          </div>
-        </header>
+        {/* 顶部导航:GooeyNav 与路由双向同步(首页为无 UI 沉浸屏,不展示) */}
+        {location.pathname !== '/' && (
+          <header className="fixed inset-x-0 top-0 z-30 flex justify-center border-b border-white/5 bg-black/30 py-2.5 backdrop-blur-sm">
+            <div className="max-w-full overflow-x-auto px-2 font-santi text-sm" style={NAV_COLORS}>
+              <GooeyNav
+                items={SECTORS.map(s => ({ label: s.label, href: `${BASENAME}${s.to}` }))}
+                activeIndex={activeIndex}
+                initialActiveIndex={activeIndex}
+                onNavigate={i => {
+                  if (SECTORS[i].to !== location.pathname) navigate(SECTORS[i].to);
+                }}
+                particleCount={12}
+                particleDistances={[70, 10]}
+                animationTime={500}
+              />
+            </div>
+          </header>
+        )}
 
         <main className="relative z-10">
           <Routes>
