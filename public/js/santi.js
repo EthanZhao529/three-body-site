@@ -257,14 +257,19 @@ camera.lookAt(0, 0, 0);
 
 const texLoader = new THREE.TextureLoader();
 // 天空盒00(scene.json 解码):st2 原图·亮度1·白色调制·绕Y -135°·静止(WebP:暗部无压缩噪)
-const skyTex = texLoader.load('assets/wp/sky8k.webp');
-skyTex.anisotropy = MAX_ANISO;
-const sky = new THREE.Mesh(
-  new THREE.SphereGeometry(80, 64, 40),
-  new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, depthWrite: false })
-);
-sky.rotation.y = -2.35619;
-scene.add(sky);
+// ⭐用户试验(2026-07-12):静态星空背景换纯黑——不建天空盒(clearColor 已是黑),
+//   顺带省去 6.8MB 贴图加载;要恢复星空把 SKY_ON 改回 true 即可
+const SKY_ON = false;
+if (SKY_ON) {
+  const skyTex = texLoader.load('assets/wp/sky8k.webp');
+  skyTex.anisotropy = MAX_ANISO;
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(80, 64, 40),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, depthWrite: false })
+  );
+  sky.rotation.y = -2.35619;
+  scene.add(sky);
+}
 
 // 世界组:天体/轨迹/罗盘都在其中,旋转世界=壁纸的 applyRotation;
 // ⭐镜头调度(objects[22] 解码):shared.gjz 每帧被该脚本覆盖——
