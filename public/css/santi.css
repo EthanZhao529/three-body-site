@@ -1,6 +1,7 @@
 /* ============================================================
-   三体实时演算 · 壁纸 1:1 浏览器复刻
-   字体/配色/布局全部对照壁纸源文件与用户录屏
+   三体实时演算 · 壁纸 1:1 浏览器复刻 + 站点增强 HUD
+   字体/配色对照壁纸源文件;左侧信息栏/状态解析/温度特效字/重启
+   为 2026-07-12 用户需求新增
    ============================================================ */
 @font-face{
   font-family:'FZTieXHJW';
@@ -30,30 +31,125 @@ body{
 }
 #hud.on{ opacity:1; }
 
-/* 文明日志(左上角,加大字体与篇幅) */
-.log-block{
+/* ---------- 左侧信息栏 ---------- */
+.left-panel{
   position:absolute; left:3.2%; top:5.5%;
-  width:min(560px,60vw); text-align:left;
-  font-family:'FZTieXHJW','Rajdhani'; font-size:15.5px;
-  letter-spacing:1.5px; line-height:2.15; color:#8ea6c8;
+  width:min(470px,44vw); text-align:left;
+  font-family:'FZTieXHJW','Rajdhani';
+  color:#8ea6c8;
 }
-.log-block .lg-head{ font-size:17px; opacity:.92; }
-.log-block .lg-sub{ opacity:.78; margin-bottom:6px; }
+.lp-title{
+  font-size:26px; letter-spacing:10px; color:#b8d2f2;
+  text-shadow:0 0 18px rgba(151,195,255,.35);
+}
+.lp-sub{
+  margin-top:4px; font-family:'Rajdhani';
+  font-size:11px; letter-spacing:5px; color:rgba(142,166,200,.55);
+}
+.lp-divider{
+  margin:14px 0 12px;
+  height:1px;
+  background:linear-gradient(to right, rgba(151,195,255,.45), rgba(151,195,255,.06) 70%, transparent);
+}
+.lp-civ{ font-size:17px; letter-spacing:2px; color:#a9c3e6; }
+.lp-civ-sub{ margin-top:4px; font-size:14px; letter-spacing:1.5px; opacity:.75; }
 
-/* 文明当前状态(左下角,字体与日志同步) */
+/* 恒星距离读数(滑条语义 fill=d/10,壁纸原式) */
+.lp-dists{ margin-top:12px; }
+.lp-dist{ display:flex; align-items:center; gap:10px; margin-top:7px; }
+.lp-dist .lbl{ flex:none; width:64px; font-size:13.5px; letter-spacing:3px; opacity:.85; }
+.lp-dist .bar{
+  flex:1; height:3px; background:rgba(142,166,200,.16);
+  overflow:hidden;
+}
+.lp-dist .bar i{
+  display:block; height:100%; width:0%;
+  background:linear-gradient(to right, rgba(151,195,255,.35), rgba(151,195,255,.85));
+  transition:width .25s linear;
+}
+.lp-dist .val{
+  flex:none; width:46px; text-align:right;
+  font-family:'Rajdhani'; font-size:13px; letter-spacing:1px; opacity:.8;
+}
+
+/* 文明纪年日志(滚动推入) */
+.lp-loghead{
+  font-size:13px; letter-spacing:4px; color:rgba(142,166,200,.6);
+  margin-bottom:6px;
+}
+.log-window{
+  overflow:hidden;
+  max-height:calc(2.15em * 8.2);
+  font-size:15.5px; letter-spacing:1.5px; line-height:2.15;
+  mask-image:linear-gradient(to bottom, black 78%, transparent 100%);
+  -webkit-mask-image:linear-gradient(to bottom, black 78%, transparent 100%);
+}
+.log-scroll{ transition:transform .45s cubic-bezier(.22,1,.36,1); }
+.log-scroll .lg-new{ animation:lg-in .55s ease both; }
+@keyframes lg-in{ from{ opacity:0; } }
+
+/* ---------- 文明当前状况(左下角) ---------- */
 .state-block{
   position:absolute; left:3.2%; bottom:5.5%;
   text-align:left; font-family:'FZTieXHJW','Rajdhani';
-  font-size:15.5px; letter-spacing:1.5px; line-height:2.15; color:#8ea6c8;
+  font-size:15.5px; letter-spacing:1.5px; line-height:2.05; color:#8ea6c8;
+  max-width:min(520px,52vw);
 }
-#hEra{ font-size:19px; letter-spacing:6px; opacity:.95; }
-#hState{ margin-top:8px; opacity:.72; }
-#hTemp{ margin-top:2px; opacity:.85; }
+#hEra{ font-size:21px; letter-spacing:7px; opacity:.95; color:#b8d2f2; }
+.temp-line{ margin-top:8px; display:flex; align-items:baseline; gap:14px; }
+#hState{ margin-top:2px; opacity:.72; }
+#hTemp{ opacity:.85; }
 #hTemp .v{ font-family:'Rajdhani'; letter-spacing:1px; }
+.state-desc{
+  margin-top:4px; font-size:13px; letter-spacing:1.5px; line-height:1.9;
+  color:rgba(142,166,200,.62);
+}
 
-/* 回正按钮(右下角) */
-#recenterBtn{
-  position:absolute; right:3.2%; bottom:5.5%;
+/* 温度四阶段特效字:冰冻 / 严寒 / 宜居 / 融化 */
+.temp-fx{
+  display:inline-block;
+  font-family:'FZTieXHJW';
+  font-size:20px; letter-spacing:6px;
+  transform-origin:50% 80%;
+}
+.t-frozen{
+  background:linear-gradient(180deg,#eef9ff 0%,#9fd4ff 45%,#4c86c9 100%);
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent; color:#9fd4ff;
+  text-shadow:0 0 14px rgba(120,190,255,.5);
+  animation:fx-shiver .16s steps(2) infinite;
+}
+@keyframes fx-shiver{
+  0%{ transform:translate(0,0); }
+  50%{ transform:translate(.7px,-.5px); }
+  100%{ transform:translate(-.6px,.4px); }
+}
+.t-cold{
+  color:#a9cdf3;
+  text-shadow:0 0 10px rgba(120,180,255,.45);
+  animation:fx-breathe 3s ease-in-out infinite;
+}
+@keyframes fx-breathe{ 0%,100%{ opacity:.7; } 50%{ opacity:1; } }
+.t-mild{
+  color:#c8e9cd;
+  text-shadow:0 0 10px rgba(150,230,170,.35);
+}
+.t-melt{
+  background:linear-gradient(180deg,#ffe9b0 0%,#ff9a4d 55%,#ff5222 100%);
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent; color:#ff9a4d;
+  text-shadow:0 0 16px rgba(255,120,40,.5);
+  animation:fx-melt 1.5s ease-in-out infinite;
+}
+@keyframes fx-melt{
+  0%,100%{ transform:scaleY(1) skewX(0deg); }
+  30%{ transform:scaleY(1.07) skewX(-1.6deg); }
+  60%{ transform:scaleY(.96) skewX(1.3deg); }
+}
+
+/* ---------- 按钮(右下:重启新宇宙 / 回正) ---------- */
+#recenterBtn,#rebootBtn{
+  position:absolute; right:3.2%;
   pointer-events:auto; cursor:pointer;
   font-family:'FZTieXHJW','Rajdhani'; font-size:13.5px; letter-spacing:8px;
   color:rgba(142,166,200,.7); background:transparent;
@@ -61,8 +157,13 @@ body{
   padding:9px 20px 9px 28px;
   transition:color .3s ease, border-color .3s ease;
 }
+#recenterBtn{ bottom:5.5%; }
+#rebootBtn{ bottom:calc(5.5% + 56px); }
 #recenterBtn:hover{
   color:rgba(185,207,236,.95); border-color:rgba(142,166,200,.6);
+}
+#rebootBtn:hover{
+  color:#ffcbb1; border-color:rgba(255,162,106,.65);
 }
 
 /* 年份 */
@@ -104,13 +205,18 @@ body{
 .back-home:hover{ color:rgba(151,195,255,.7); }
 
 @media (max-width:760px){
-  #hClock{ font-size:38px; }
-  .menu-left{ left:6%; top:58%; }
-  #hEra{ font-size:22px; letter-spacing:6px; }
-  #hState{ font-size:13px; margin-top:16px; }
-  #hTemp{ font-size:13.5px; margin-top:14px; }
-  .menu-right{ display:none; }
-  .log-block{ font-size:11px; top:22%; }
-  .audio-block{ width:78vw; height:48px; bottom:11%; }
+  .left-panel{ width:70vw; }
+  .lp-title{ font-size:19px; letter-spacing:6px; }
+  .lp-civ{ font-size:14px; }
+  .lp-civ-sub{ font-size:12px; }
+  .lp-dist .lbl{ font-size:11.5px; width:54px; }
+  .log-window{ font-size:11px; max-height:calc(2.15em * 6.2); }
+  .lp-loghead{ font-size:10.5px; }
+  #hEra{ font-size:18px; letter-spacing:5px; }
+  .temp-fx{ font-size:16px; }
+  #hState{ font-size:13px; }
+  #hTemp{ font-size:13px; }
+  .state-desc{ font-size:11px; max-width:80vw; }
   #hYears{ font-size:14px; }
+  #rebootBtn,#recenterBtn{ font-size:12px; letter-spacing:5px; padding:7px 14px 7px 19px; }
 }

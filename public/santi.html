@@ -13,13 +13,36 @@
 
 <!-- HUD(壁纸主界面) -->
 <div id="hud">
-  <div class="log-block" id="logBlock"></div>
+  <!-- 左侧信息栏(标题/文明信息/恒星距离/文明纪年日志) -->
+  <div class="left-panel">
+    <div class="lp-title">三体实时演算</div>
+    <div class="lp-sub">THREE-BODY · REAL-TIME SIMULATION</div>
+    <div class="lp-divider"></div>
+    <div class="lp-civ" id="lpCiv">系统初始化</div>
+    <div class="lp-civ-sub" id="lpCivSub">&nbsp;</div>
+    <div class="lp-dists">
+      <div class="lp-dist"><span class="lbl">恒星·α</span><div class="bar"><i id="bar0"></i></div><span class="val" id="d0">-.--</span></div>
+      <div class="lp-dist"><span class="lbl">恒星·β</span><div class="bar"><i id="bar1"></i></div><span class="val" id="d1">-.--</span></div>
+      <div class="lp-dist"><span class="lbl">恒星·γ</span><div class="bar"><i id="bar2"></i></div><span class="val" id="d2">-.--</span></div>
+    </div>
+    <div class="lp-divider"></div>
+    <div class="lp-loghead">文明纪年日志 · CIVILIZATION LOG</div>
+    <div class="log-window"><div class="log-scroll" id="logScroll"></div></div>
+  </div>
+
+  <!-- 左下:文明当前状况(纪元/温度特效字/状态/解析) -->
   <div class="state-block">
     <div id="hEra">乱纪元</div>
+    <div class="temp-line">
+      <span id="tempFx" class="temp-fx t-mild">宜居</span>
+      <span id="hTemp">表面温度 : <span class="v" id="hTempV">--.--</span>°C</span>
+    </div>
     <div id="hState">State : 脱水</div>
-    <div id="hTemp">表面温度 : <span class="v" id="hTempV">--.--</span>°C</div>
+    <div id="hDesc" class="state-desc"></div>
   </div>
+
   <div id="hYears">0.00 Years</div>
+  <button id="rebootBtn" type="button">重启新宇宙</button>
   <button id="recenterBtn" type="button">回正</button>
 </div>
 

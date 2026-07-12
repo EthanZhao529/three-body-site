@@ -157,6 +157,7 @@ function surfaceTemp(runtime) {
   return Math.max(-270, Math.min(1500, t));
 }
 let civEscaped = false;
+let civRebooted = false;   // 手动重启(重启按钮):下一帧文明记账"毁灭于系统重启"
 function civAdvance(dt, runtime) {
   civ.years += dt * KTIME;                          // 引擎:年率 = kt/10 × ktime(随流速同缩)
   const year = Math.floor(civ.years);
@@ -201,6 +202,11 @@ function civAdvance(dt, runtime) {
     civ.count++; civ.suit = 0;
   }
   if (civEscaped) { destroy('天体逃逸'); civEscaped = false; }
+  if (civRebooted) {
+    if (civ.alive) destroy('系统重启');
+    else ev.push('系统重启，重新生成宇宙');
+    civRebooted = false;
+  }
   if (cs.roche) destroy(cs.roche);
   if (cs.pc) destroy(cs.pc);
   if (cs.sc) destroy(cs.sc);
@@ -268,10 +274,12 @@ scene.add(sky);
 const world = new THREE.Group();
 world.rotation.order = 'YXZ';
 scene.add(world);
+// ⭐用户需求(2026-07-12):打开即运行、流畅进入——取消 8s 冲镜动画,gjz 恒为稳态 0
+// (原版:startTime=0,duration=8s,easeOutQuart,50→0;如需恢复改回 runT 缓动式)
 function gjzNow() {
-  return runT >= 8 ? 0 : 50 * Math.pow(1 - runT / 8, 4);
+  return 0;
 }
-let curGJZ = 50;
+let curGJZ = 0;
 
 function glowTexture() {
   const s = 256, cv = document.createElement('canvas');
@@ -936,7 +944,10 @@ const grainPass = new ShaderPass({
 composer.addPass(grainPass);
 composer.addPass(bloomPass);   // WE:scene 泛光最后作用于合成结果(效果层吃的是泛光前画面)
 
+// ⭐用户需求(2026-07-12):演算模型整体偏右(给左侧信息栏让位);窄屏不偏
+let worldX = 0;
 function resize() {
+  worldX = innerWidth > 900 ? 1.0 : 0;
   renderer.setSize(innerWidth, innerHeight, false);
   composer.setSize(innerWidth * DPR, innerHeight * DPR);
   grainPass.uniforms.uAspect.value = innerWidth / innerHeight;
@@ -970,8 +981,12 @@ addEventListener('pointermove', e => {
 
 /* ==================== HUD ==================== */
 const $ = id => document.getElementById(id);
-const elLog = $('logBlock'), elEra = $('hEra'), elState = $('hState'), elTempV = $('hTempV');
+const elEra = $('hEra'), elState = $('hState'), elTempV = $('hTempV');
 const elYears = $('hYears');
+const elLogScroll = $('logScroll'), elCiv = $('lpCiv'), elCivSub = $('lpCivSub');
+const elTempFx = $('tempFx'), elDesc = $('hDesc');
+const elBars = [$('bar0'), $('bar1'), $('bar2')];
+const elDs = [$('d0'), $('d1'), $('d2')];
 const hud = $('hud');
 let hudOn = false;
 function setHud(on) { hudOn = on; hud.classList.toggle('on', on); }
@@ -980,23 +995,97 @@ $('recenterBtn').addEventListener('click', e => {
   e.stopPropagation();
   recenter = true;
 });
+// ⭐一键重启新系统(用户需求 2026-07-12):换随机新宇宙 + 半透明重启罩 + 文明记账
+$('rebootBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  if (bootSeq) return;               // 遮罩期间忽略连点
+  civRebooted = true;
+  numSeq = 0;                        // 打断进行中的逃逸倒计时
+  resetSystem();
+  runBootSequence('系统重启中', 1.2, null, true);
+});
 
-let lastLogHtml = '', lastEra = '';
+// 温度四阶段特效字(阈值=文明系统常量:低温线-100/恒纪元带-55~70)
+function tempStage(t) {
+  if (t < CIV.LOW_T) return ['冰冻', 't-frozen'];
+  if (t < CIV.STAB_LO) return ['严寒', 't-cold'];
+  if (t <= CIV.STAB_HI) return ['宜居', 't-mild'];
+  return ['融化', 't-melt'];
+}
+// 当前状况逐条解析(纪元/凌空/飞星/存亡 × 浸泡/脱水)
+function eraDesc() {
+  switch (civ.era) {
+    case '恒纪元':
+      return civ.alive
+        ? '三体运动进入短暂稳态,气候温和——文明浸泡复苏,进入高速发展期。'
+        : '气候回稳,大地回暖——文明种子等待复苏时机。';
+    case '三日凌空': return '三颗恒星同时悬于天顶,行星表面化为炼狱,文明危在旦夕。';
+    case '双日凌空': return '两颗恒星凌空而立,海洋沸腾,大地龟裂。';
+    case '巨日凌空': return '巨日凌空,烈焰灼烧地表,万物在光焰中俯首。';
+    case '三飞星': return '三颗恒星尽数远去化作飞星,行星坠入无尽寒夜,温度逼近绝对零度。';
+    case '双飞星': return '两颗恒星化作飞星,热量急速流失,长夜将至。';
+    case '飞星': return '天空只余一颗遥远飞星,严寒正在逼近。';
+    default:
+      return civ.alive
+        ? '三体运动混沌无序,酷寒与炙热无常交替——文明脱水贮存,静待恒纪元。'
+        : '乱纪元肆虐,环境超出生存阈值——大地上只余脱水的文明遗骸。';
+  }
+}
+
+let lastLogHtml = '', lastEra = '', lastStage = '', lastDesc = '', lastCiv = '', lastCivSub = '', lastLogFirst = '';
 function updateHud() {
   if (civ.era !== lastEra) { elEra.textContent = civ.era; lastEra = civ.era; }
-  elState.textContent = 'State : ' + civ.state;
+  elState.textContent = 'State : ' + civ.state +
+    (civ.state === '浸泡' ? ' —— 恒纪元来临,文明在液态水中复苏' : ' —— 乱纪元中以脱水形态贮存');
   elTempV.textContent = civ.temp.toFixed(2);
   elYears.textContent = civ.years.toFixed(2) + ' Years';
-  let html = '<div class="lg-head">' +
-    (civ.alive ? '第' + civ.count + '号文明正在运行' : '文明无法生存') + '</div>' +
-    '<div class="lg-sub">' +
-    (civ.alive ? '文明已存活: ' + Math.max(0, Math.floor(civ.years) - civ.startYear) + '年'
-               : '上个文明寿命: ' + civ.lastLife + '年') + '</div>';
+
+  // 温度特效字(冰冻/严寒/宜居/融化)
+  const st = tempStage(civ.temp);
+  if (st[1] !== lastStage) {
+    elTempFx.textContent = st[0];
+    elTempFx.className = 'temp-fx ' + st[1];
+    lastStage = st[1];
+  }
+  // 状况解析
+  const desc = eraDesc();
+  if (desc !== lastDesc) { elDesc.textContent = desc; lastDesc = desc; }
+
+  // 左栏:文明信息
+  const civTxt = civ.alive ? '第' + civ.count + '号文明正在运行' : '文明无法生存';
+  if (civTxt !== lastCiv) { elCiv.textContent = civTxt; lastCiv = civTxt; }
+  const subTxt = civ.alive
+    ? '文明已存活: ' + Math.max(0, Math.floor(civ.years) - civ.startYear) + '年'
+    : '上个文明寿命: ' + civ.lastLife + '年';
+  if (subTxt !== lastCivSub) { elCivSub.textContent = subTxt; lastCivSub = subTxt; }
+
+  // 左栏:恒星距离读数(滑条语义 fill=d/10)
+  for (let i = 0; i < 3; i++) {
+    elDs[i].textContent = civ.d[i].toFixed(2);
+    elBars[i].style.width = Math.min(civ.d[i] * 10, 100).toFixed(1) + '%';
+  }
+
+  // 日志:新条目滚动推入(整列下滑一行 + 首条淡入)
+  let html = '';
   for (let j = 0; j < civ.log.length; j++) {
     const op = Math.max(0.18, 0.85 - j * 0.07);
-    html += '<div style="opacity:' + op.toFixed(2) + '">' + civ.log[j].txt + '</div>';
+    html += '<div class="lg-line' + (j === 0 ? ' lg-new' : '') + '" style="opacity:' +
+      op.toFixed(2) + '">' + civ.log[j].txt + '</div>';
   }
-  if (html !== lastLogHtml) { elLog.innerHTML = html; lastLogHtml = html; }
+  if (html !== lastLogHtml) {
+    const isNew = civ.log.length > 0 && civ.log[0].txt !== lastLogFirst;
+    elLogScroll.innerHTML = html;
+    lastLogHtml = html;
+    if (isNew) {
+      lastLogFirst = civ.log[0].txt;
+      elLogScroll.style.transition = 'none';
+      elLogScroll.style.transform = 'translateY(-2.15em)';
+      requestAnimationFrame(() => {
+        elLogScroll.style.transition = '';
+        elLogScroll.style.transform = 'translateY(0)';
+      });
+    }
+  }
 }
 
 /* ==================== 系统启动/重启遮罩 ==================== */
@@ -1104,6 +1193,10 @@ function frame() {
   world.position.z = curGJZ;
   olGroup.position.z = curGJZ;
   dustGroup.position.z = 0.4 * curGJZ;   // 母组 MAIN 0-1:origin.z = 0.4×gjz
+  // 模型偏右:世界/标注/尘埃同步右移(天空盒不动)
+  world.position.x = worldX;
+  olGroup.position.x = worldX;
+  dustGroup.position.x = worldX;
 
   // 尘埃推进 + 后处理时间
   advanceDust(dt);
@@ -1176,6 +1269,6 @@ function frame() {
 
   composer.render();
 }
-// 首次进入:系统启动中
-runBootSequence('系统启动中', 2, () => setHud(true), false, 3);   // 黑底原时序:2s保持+3s淡出
+// 首次进入:系统启动中(用户需求:秒进——冲镜已取消,遮罩只留 0.2s 保持 + 0.9s 淡出)
+runBootSequence('系统启动中', 0.2, () => setHud(true), false, 0.9);
 frame();
