@@ -1,16 +1,15 @@
-import { lazy, Suspense, useRef, useState } from 'react';
+import { useState } from 'react';
 import DarkForestField from '../components/DarkForestField/DarkForestField';
 
-// 侦察透镜(自写放大着色器)依赖 r3f,按需懒加载,不拖累其他页面
-const DarkLens = lazy(() => import('../components/DarkLens/DarkLens'));
-
 let uid = 0;
+
+const BASE = import.meta.env.BASE_URL;
 
 // 玻璃小面板(与全站玻璃语言一致)
 const glassPanel =
   'rounded-xl border border-[#97C3FF]/15 bg-gradient-to-br from-[#97C3FF]/10 via-[#0a1428]/25 to-transparent px-4 py-3 shadow-[inset_0_1px_0_rgba(220,235,255,0.18)] backdrop-blur-md';
 
-// 浮层定位:跟随目标星,右侧偏移并夹取在视口内
+// 情报卡定位:跟随目标星,右侧偏移并夹取在视口内
 const anchorStyle = (sx, sy, w, h) => ({
   left: Math.min(Math.max(sx + 22, 12), (typeof window !== 'undefined' ? window.innerWidth : 1280) - w - 12),
   top: Math.min(Math.max(sy - 30, 64), (typeof window !== 'undefined' ? window.innerHeight : 800) - h - 12)
@@ -28,52 +27,38 @@ function IntelRow({ k, v, color }) {
 }
 
 export default function DarkForest() {
-  const sectionRef = useRef(null);
-  const apiRef = useRef(null);
   const [entries, setEntries] = useState([]);
-  const [stats, setStats] = useState({ alive: 0, cleansed: 0 });
-  const [fieldCanvas, setFieldCanvas] = useState(null);
+  const [stats, setStats] = useState({ alive: 0, observed: 0 });
   const [target, setTarget] = useState(null);   // 悬停情报
-  const [aim, setAim] = useState(null);         // 瞄准中(武器菜单)
 
-  const push = (text, type) =>
-    setEntries(l => [{ id: (uid += 1), text, type }, ...l].slice(0, 6));
-
-  const fire = weapon => {
-    apiRef.current?.fire(weapon);
-    setAim(null);
-  };
+  const push = text => setEntries(l => [{ id: (uid += 1), text }, ...l].slice(0, 6));
 
   return (
-    <section ref={sectionRef} className="relative h-dvh overflow-hidden">
-      {/* 星野交互层 */}
+    <section className="relative h-dvh overflow-hidden bg-black">
+      {/* 8K 真实星空背景(照搬演算页 sky8k.webp) + 压暗/暗角,聚焦文明目标 */}
+      <img
+        src={`${BASE}assets/wp/sky8k.webp`}
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full select-none object-cover"
+      />
+      <div className="absolute inset-0 bg-black/30" aria-hidden="true" />
+      <div
+        className="absolute inset-0"
+        aria-hidden="true"
+        style={{ background: 'radial-gradient(ellipse at center, transparent 42%, rgba(0,0,0,0.55) 100%)' }}
+      />
+
+      {/* 星野交互层(透明画布,只画文明星点) */}
       <div className="absolute inset-0">
         <DarkForestField
-          onStrike={({ coordStr, n, weapon }) =>
-            push(
-              weapon === 'foil'
-                ? `第 ${n} 次打击 · 二向箔降维 ${coordStr}`
-                : `第 ${n} 次打击 · 光粒击毁 ${coordStr}`,
-              'strike'
-            )
-          }
-          onSpawn={({ coordStr }) => push(`新的文明在 ${coordStr} 诞生`, 'spawn')}
-          onCensus={setStats}
           onTarget={setTarget}
-          onAim={setAim}
-          onReady={api => {
-            apiRef.current = api;
-            setFieldCanvas(api.canvas);
-          }}
+          onObserve={({ coordStr, intel, n }) =>
+            push(`观测 No.${String(n).padStart(3, '0')} · ${coordStr} · ${intel.stage}`)
+          }
+          onCensus={setStats}
         />
       </div>
-
-      {/* 侦察透镜:屏幕空间放大镜(点击穿透) */}
-      {fieldCanvas && (
-        <Suspense fallback={null}>
-          <DarkLens sourceCanvas={fieldCanvas} eventSource={sectionRef} />
-        </Suspense>
-      )}
 
       {/* 顶部:标题+两公理+概念徽章+操作提示 */}
       <div className="pointer-events-none relative z-10 flex select-none flex-col items-center px-6 pt-24 text-center">
@@ -83,7 +68,7 @@ export default function DarkForest() {
         <h1 className="mt-3 font-santi text-4xl text-white md:text-6xl [text-shadow:0_0_24px_rgba(151,195,255,0.35)]">
           黑暗森林
         </h1>
-        <div className="mt-4 space-y-1.5 font-body text-xs text-[#8A93A8] md:text-sm">
+        <div className="mt-4 space-y-1.5 font-body text-xs text-[#c6cddb]/80 md:text-sm">
           <p>
             <span className="mr-2 font-tech tracking-[0.15em] text-[#97C3FF]">AXIOM·01</span>
             生存是文明的第一需要。
@@ -101,20 +86,20 @@ export default function DarkForest() {
             技术爆炸 · TECH EXPLOSION
           </span>
         </div>
-        <p className="mt-5 font-tech text-xs tracking-[0.35em] text-[#FFA26A]/60">
-          LOCK &amp; STRIKE · 点击星点,选择打击方式
+        <p className="mt-5 font-tech text-xs tracking-[0.35em] text-[#97C3FF]/55">
+          HOVER TO OBSERVE · 悬停观测文明,点击记录坐标
         </p>
       </div>
 
       {/* 目标情报卡(悬停锁定时浮现) */}
-      {target && !aim && (
+      {target && (
         <div
           className={`pointer-events-none absolute z-20 w-[230px] select-none ${glassPanel}`}
           style={anchorStyle(target.sx, target.sy, 230, 190)}
         >
-          <p className="mb-1.5 flex items-center gap-2 font-tech text-[10px] tracking-[0.3em] text-[#FFA26A]/80">
-            <span className="h-1 w-1 animate-pulse rounded-full bg-[#FFA26A]" />
-            TARGET LOCKED
+          <p className="mb-1.5 flex items-center gap-2 font-tech text-[10px] tracking-[0.3em] text-[#97C3FF]/80">
+            <span className="h-1 w-1 animate-pulse rounded-full bg-[#97C3FF]" />
+            OBSERVING · 观测中
           </p>
           <div className="space-y-1 font-body text-xs">
             <IntelRow k="距离" v={target.intel.dist} />
@@ -129,55 +114,15 @@ export default function DarkForest() {
         </div>
       )}
 
-      {/* 武器选择菜单(点击目标后浮现) */}
-      {aim && (
-        <div
-          className={`absolute z-20 w-[240px] select-none ${glassPanel}`}
-          style={anchorStyle(aim.sx, aim.sy, 240, 170)}
-        >
-          <p className="mb-2 flex items-center justify-between font-tech text-[10px] tracking-[0.25em] text-[#FFA26A]/80">
-            <span>SELECT WEAPON</span>
-            <span style={{ color: aim.intel.threat[1] }}>威胁·{aim.intel.threat[0]}</span>
-          </p>
-          <button
-            type="button"
-            onClick={() => fire('photoid')}
-            className="mb-2 block w-full rounded-lg border border-[#FFA26A]/40 bg-[#FFA26A]/10 px-3 py-2 text-left transition-colors hover:border-[#FFA26A] hover:bg-[#FFA26A]/20"
-          >
-            <span className="block font-santi text-sm text-[#FFCBB1]">光粒 · PHOTOID</span>
-            <span className="block font-body text-[10px] text-[#c8a488]">
-              恒星级动能打击,即刻粉碎
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => fire('foil')}
-            className="block w-full rounded-lg border border-[#97C3FF]/40 bg-[#97C3FF]/10 px-3 py-2 text-left transition-colors hover:border-[#97C3FF] hover:bg-[#97C3FF]/20"
-          >
-            <span className="block font-santi text-sm text-[#c6d6ef]">二向箔 · 2D FOIL</span>
-            <span className="block font-body text-[10px] text-[#8fa3c4]">
-              降维打击,将目标压入二维
-            </span>
-          </button>
-          <p className="mt-1.5 text-center font-tech text-[9px] tracking-[0.2em] text-white/25">
-            点击空域取消
-          </p>
-        </div>
-      )}
-
-      {/* 左下:打击日志 */}
+      {/* 左下:观测日志 */}
       {entries.length > 0 && (
         <div className={`pointer-events-none absolute bottom-6 left-5 z-10 select-none ${glassPanel}`}>
           <p className="mb-1.5 font-tech text-[10px] tracking-[0.3em] text-[#97C3FF]/50">
-            STRIKE LOG
+            OBSERVATION LOG
           </p>
           <div className="space-y-1 font-santi text-xs md:text-sm">
             {entries.map((e, i) => (
-              <p
-                key={e.id}
-                className={e.type === 'strike' ? 'text-[#FFA26A]' : 'text-[#97C3FF]'}
-                style={{ opacity: Math.max(0.9 - i * 0.15, 0.12) }}
-              >
+              <p key={e.id} className="text-[#97C3FF]" style={{ opacity: Math.max(0.9 - i * 0.15, 0.12) }}>
                 {e.text}
               </p>
             ))}
@@ -185,17 +130,17 @@ export default function DarkForest() {
         </div>
       )}
 
-      {/* 右下:文明统计 */}
+      {/* 右下:文明观测统计 */}
       <div
         className={`pointer-events-none absolute bottom-6 right-5 z-10 select-none text-right ${glassPanel}`}
       >
         <p className="mb-1.5 font-tech text-[10px] tracking-[0.3em] text-[#97C3FF]/50">CENSUS</p>
         <div className="font-tech text-xs tracking-[0.2em] text-white/45">
           <p>
-            SURVIVING · 现存文明 <span className="text-[#97C3FF]">{stats.alive}</span>
+            DETECTED · 探测到文明 <span className="text-[#97C3FF]">{stats.alive}</span>
           </p>
           <p className="mt-1">
-            CLEANSED · 已清理 <span className="text-[#FFA26A]">{stats.cleansed}</span>
+            OBSERVED · 已观测 <span className="text-[#FFCBB1]">{stats.observed}</span>
           </p>
         </div>
       </div>
