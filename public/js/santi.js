@@ -271,6 +271,94 @@ if (SKY_ON) {
   scene.add(sky);
 }
 
+// ⭐用户需求(2026-07-12 二次):纯黑太暗——程序化深空远景:稀疏星点+星云+旋涡星系
+// 全程序化(canvas 贴图,零资源下载);静止远景挂 scene,与壁纸天空盒同语义(不随世界拖拽旋转)
+(function buildDeepSky() {
+  const R = 72;
+  // 1) 稀疏星点(球壳均匀分布,少量暖色)
+  const N = 750, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const u = Math.random() * 2 - 1, ph = Math.random() * Math.PI * 2;
+    const s = Math.sqrt(1 - u * u);
+    pos[i * 3] = R * s * Math.cos(ph);
+    pos[i * 3 + 1] = R * u;
+    pos[i * 3 + 2] = R * s * Math.sin(ph);
+    const b = 0.3 + Math.random() * 0.7, warm = Math.random() < 0.15;
+    col[i * 3] = b * (warm ? 1 : 0.8);
+    col[i * 3 + 1] = b * 0.87;
+    col[i * 3 + 2] = b * (warm ? 0.74 : 1);
+  }
+  const sg = new THREE.BufferGeometry();
+  sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  sg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const starPts = new THREE.Points(sg, new THREE.PointsMaterial({
+    size: 2.0, sizeAttenuation: false, vertexColors: true,
+    transparent: true, opacity: 0.9, depthWrite: false
+  }));
+  starPts.frustumCulled = false;
+  scene.add(starPts);
+
+  // 2) 星云贴图:多层柔和光斑叠加(lighter 混合)
+  function nebulaTex(rgb) {
+    const s = 256, cv = document.createElement('canvas');
+    cv.width = cv.height = s;
+    const x = cv.getContext('2d');
+    x.globalCompositeOperation = 'lighter';
+    for (let k = 0; k < 16; k++) {
+      const cx = s / 2 + (Math.random() - 0.5) * s * 0.5;
+      const cy = s / 2 + (Math.random() - 0.5) * s * 0.5;
+      const r = s * (0.08 + Math.random() * 0.22);
+      const a = 0.05 + Math.random() * 0.09;
+      const g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0, 'rgba(' + rgb + ',' + a + ')');
+      g.addColorStop(1, 'rgba(' + rgb + ',0)');
+      x.fillStyle = g;
+      x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill();
+    }
+    return new THREE.CanvasTexture(cv);
+  }
+  // 3) 旋涡星系贴图:倾斜盘面 + 亮核
+  function galaxyTex() {
+    const s = 256, cv = document.createElement('canvas');
+    cv.width = cv.height = s;
+    const x = cv.getContext('2d');
+    x.translate(s / 2, s / 2);
+    x.rotate(Math.random() * Math.PI);
+    x.scale(1, 0.32 + Math.random() * 0.12);
+    x.globalCompositeOperation = 'lighter';
+    let g = x.createRadialGradient(0, 0, 0, 0, 0, s * 0.46);
+    g.addColorStop(0, 'rgba(200,220,255,0.5)');
+    g.addColorStop(0.25, 'rgba(160,190,255,0.22)');
+    g.addColorStop(1, 'rgba(120,150,255,0)');
+    x.fillStyle = g;
+    x.beginPath(); x.arc(0, 0, s * 0.46, 0, 7); x.fill();
+    g = x.createRadialGradient(0, 0, 0, 0, 0, s * 0.1);
+    g.addColorStop(0, 'rgba(255,245,230,0.95)');
+    g.addColorStop(1, 'rgba(255,235,210,0)');
+    x.fillStyle = g;
+    x.beginPath(); x.arc(0, 0, s * 0.1, 0, 7); x.fill();
+    return new THREE.CanvasTexture(cv);
+  }
+  const put = (tex, dir, scale, opacity) => {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, blending: THREE.AdditiveBlending, transparent: true,
+      opacity, depthWrite: false
+    }));
+    sp.position.set(dir[0], dir[1], dir[2]).normalize().multiplyScalar(R * 0.96);
+    sp.scale.set(scale, scale, 1);
+    scene.add(sp);
+  };
+  // 星云:蓝/紫/暖三色,大而淡
+  put(nebulaTex('120,170,255'), [-0.55, 0.28, -0.9], 66, 0.30);
+  put(nebulaTex('158,120,255'), [0.85, 0.12, -0.55], 58, 0.26);
+  put(nebulaTex('255,168,120'), [0.15, -0.4, -1], 48, 0.16);
+  put(nebulaTex('120,170,255'), [-0.9, -0.15, 0.35], 55, 0.20);
+  // 星系:小而清晰
+  put(galaxyTex(), [0.45, 0.5, -0.85], 13, 0.75);
+  put(galaxyTex(), [-0.3, 0.62, -0.5], 8, 0.60);
+  put(galaxyTex(), [0.95, -0.2, -0.2], 10, 0.55);
+})();
+
 // 世界组:天体/轨迹/罗盘都在其中,旋转世界=壁纸的 applyRotation;
 // ⭐镜头调度(objects[22] 解码):shared.gjz 每帧被该脚本覆盖——
 //   startTime=0,duration=8s,easeOutQuart,startValue=50 → endValue=用户distance=0
@@ -989,7 +1077,7 @@ const $ = id => document.getElementById(id);
 const elEra = $('hEra'), elState = $('hState'), elTempV = $('hTempV');
 const elYears = $('hYears');
 const elLogScroll = $('logScroll'), elCiv = $('lpCiv'), elCivSub = $('lpCivSub');
-const elTempFx = $('tempFx'), elDesc = $('hDesc');
+const elTempFx = $('tempFx'), elDesc = $('hDesc'), elThreatV = $('hThreatV');
 const elBars = [$('bar0'), $('bar1'), $('bar2')];
 const elDs = [$('d0'), $('d1'), $('d2')];
 const hud = $('hud');
@@ -1017,6 +1105,14 @@ function tempStage(t) {
   if (t <= CIV.STAB_HI) return ['宜居', 't-mild'];
   return ['融化', 't-melt'];
 }
+// 威胁评估(由纪元/温度推导,四档)
+function threatLevel() {
+  if (civ.temp < CIV.LOW_T || civ.temp > CIV.HIGH_T) return ['极危', '#ff5a3c'];
+  if (civ.era === '三日凌空' || civ.era === '三飞星') return ['极危', '#ff5a3c'];
+  if (civ.era !== '恒纪元' && civ.era !== '乱纪元') return ['高危', '#ffa26a'];
+  if (civ.era === '乱纪元') return ['中危', '#e8c66a'];
+  return ['低危', '#8fd9a8'];
+}
 // 当前状况逐条解析(纪元/凌空/飞星/存亡 × 浸泡/脱水)
 function eraDesc() {
   switch (civ.era) {
@@ -1037,7 +1133,7 @@ function eraDesc() {
   }
 }
 
-let lastLogHtml = '', lastEra = '', lastStage = '', lastDesc = '', lastCiv = '', lastCivSub = '', lastLogFirst = '';
+let lastLogHtml = '', lastEra = '', lastStage = '', lastDesc = '', lastCiv = '', lastCivSub = '', lastLogFirst = '', lastThreat = '';
 function updateHud() {
   if (civ.era !== lastEra) { elEra.textContent = civ.era; lastEra = civ.era; }
   elState.textContent = 'State : ' + civ.state +
@@ -1051,6 +1147,13 @@ function updateHud() {
     elTempFx.textContent = st[0];
     elTempFx.className = 'temp-fx ' + st[1];
     lastStage = st[1];
+  }
+  // 威胁评估
+  const th = threatLevel();
+  if (th[0] !== lastThreat) {
+    elThreatV.textContent = th[0];
+    elThreatV.style.color = th[1];
+    lastThreat = th[0];
   }
   // 状况解析
   const desc = eraDesc();
