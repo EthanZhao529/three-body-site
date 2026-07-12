@@ -1,45 +1,84 @@
 import * as THREE from 'three';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { MeshTransmissionMaterial } from '@react-three/drei';
-import { easing } from 'maath';
 
-// 黑暗森林·侦察透镜(React Bits FluidGlass lens 模式的适配版):
-// 玻璃球跟随光标,以 MeshTransmissionMaterial 折射/放大下方 2D 星野画布
-// (星野画布每帧作为 CanvasTexture 喂入 buffer,故透镜里是"活"的画面);
-// 整层 pointer-events:none,点击穿透到星野执行打击,互不干扰。
-function LensBall({ sourceCanvas }) {
-  const ref = useRef();
-  const [tex] = useState(() => {
+// 黑暗森林·侦察透镜 v2:自写屏幕空间放大着色器(替换 MeshTransmissionMaterial——
+// 后者在本场景出现奶白+同心环伪影且采样发糊)。
+// 特性:①原生分辨率直接采样星野画布(像素拉满,不糊)
+//      ②放大率从中心(≈2.2x)到边缘平滑衰减到 1x → 透镜边界与背景无缝融合
+//      ③边缘轻微色散 + 极弱玻璃圈光;整层 pointer-events:none 点击穿透
+const VERT = `
+varying vec2 vUv;
+void main(){
+  vUv = uv;
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}
+`;
+const FRAG = `
+precision highp float;
+uniform sampler2D uTex;
+uniform vec2 uCenter;
+uniform vec2 uRes;
+uniform float uRadius;
+varying vec2 vUv;
+void main(){
+  vec2 frag = vUv * uRes;
+  vec2 c = uCenter * uRes;
+  vec2 d = frag - c;
+  float r = length(d) / uRadius;
+  if (r >= 1.0) discard;
+  float rr = smoothstep(0.0, 1.0, r * r);
+  float k = mix(0.45, 1.0, rr);            // 采样压缩:中心放大~2.2x,边缘1x(无缝)
+  float ca = 0.012 * r * r * uRadius;      // 色散(px),边缘增强
+  vec2 nd = r > 0.0001 ? normalize(d) : vec2(0.0);
+  vec2 base = c + d * k;
+  float cr = texture2D(uTex, (base - nd * ca) / uRes).r;
+  float cg = texture2D(uTex, base / uRes).g;
+  float cb = texture2D(uTex, (base + nd * ca) / uRes).b;
+  vec3 col = vec3(cr, cg, cb) * mix(1.18, 1.0, rr);   // 镜内聚光,边缘归一保无缝
+  float rim = smoothstep(0.90, 0.995, r) * (1.0 - smoothstep(0.995, 1.0, r));
+  col += vec3(0.55, 0.72, 1.0) * rim * 0.10;          // 极弱玻璃圈光
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+function LensPlane({ sourceCanvas }) {
+  const [uniforms] = useState(() => {
     const t = new THREE.CanvasTexture(sourceCanvas);
     t.minFilter = THREE.LinearFilter;
     t.magFilter = THREE.LinearFilter;
     t.generateMipmaps = false;
-    return t;
+    return {
+      uTex: { value: t },
+      uCenter: { value: new THREE.Vector2(0.5, 0.45) },
+      uRes: { value: new THREE.Vector2(1, 1) },
+      uRadius: { value: 150 }
+    };
   });
 
   useFrame((state, delta) => {
-    tex.needsUpdate = true;
-    const { pointer, viewport } = state;
-    easing.damp3(
-      ref.current.position,
-      [(pointer.x * viewport.width) / 2, (pointer.y * viewport.height) / 2, 0],
-      0.12,
-      delta
-    );
+    uniforms.uTex.value.needsUpdate = true;
+    const { pointer, size } = state;
+    uniforms.uRes.value.set(size.width, size.height);
+    uniforms.uRadius.value = Math.min(size.width, size.height) * 0.17;
+    const tx = (pointer.x + 1) / 2;
+    const ty = (pointer.y + 1) / 2;
+    const c = uniforms.uCenter.value;
+    const k = 1 - Math.exp(-delta / 0.09);   // 阻尼跟随
+    c.x += (tx - c.x) * k;
+    c.y += (ty - c.y) * k;
   });
 
   return (
-    <mesh ref={ref} scale={0.62}>
-      <sphereGeometry args={[1, 64, 32]} />
-      <MeshTransmissionMaterial
-        buffer={tex}
-        ior={1.15}
-        thickness={2}
-        anisotropy={0.01}
-        chromaticAberration={0.08}
-        transmission={1}
-        roughness={0}
+    <mesh frustumCulled={false}>
+      <planeGeometry args={[2, 2]} />
+      <shaderMaterial
+        vertexShader={VERT}
+        fragmentShader={FRAG}
+        uniforms={uniforms}
+        transparent
+        depthTest={false}
+        depthWrite={false}
       />
     </mesh>
   );
@@ -49,13 +88,12 @@ export default function DarkLens({ sourceCanvas, eventSource }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-[5]">
       <Canvas
-        camera={{ position: [0, 0, 20], fov: 15 }}
-        gl={{ alpha: true, antialias: true }}
-        dpr={[1, 1.5]}
+        gl={{ alpha: true, antialias: false }}
+        dpr={[1, 2]}
         eventSource={eventSource}
         eventPrefix="client"
       >
-        <LensBall sourceCanvas={sourceCanvas} />
+        <LensPlane sourceCanvas={sourceCanvas} />
       </Canvas>
     </div>
   );
