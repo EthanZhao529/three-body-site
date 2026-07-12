@@ -73,7 +73,18 @@ export default function DarkForestField({ onTarget, onObserve, onCensus }) {
 
     // 流星(偶发划过)
     let meteor = null;
-    let meteorNext = performance.now() + rand(6000, 14000);
+    let meteorNext = performance.now() + rand(5000, 12000);
+
+    // 星光闪耀(随机星点周期性爆出十字衍射芒)
+    const flares = [];
+    let nextFlare = performance.now() + rand(1500, 4000);
+
+    // 漂浮尘埃(缓慢上飘,时间驱动无状态回绕)
+    const motes = Array.from({ length: 30 }, () => ({
+      x0: Math.random(), y0: Math.random(),
+      vx: rand(-0.008, 0.008), vy: rand(-0.014, -0.004),
+      r: rand(0.5, 1.3), a: rand(0.05, 0.16), ph: rand(0, 6.28)
+    }));
 
     const toLocal = e => {
       const r = canvas.getBoundingClientRect();
@@ -148,6 +159,17 @@ export default function DarkForestField({ onTarget, onObserve, onCensus }) {
       ctx.clearRect(0, 0, W, H);           // 透明,露出下方 8K 星空背景
       const t = now / 1000;
 
+      // 漂浮尘埃(最底层,缓慢上飘微闪)
+      for (const m of motes) {
+        const x = (((m.x0 + m.vx * t) % 1) + 1) % 1 * W;
+        const y = (((m.y0 + m.vy * t) % 1) + 1) % 1 * H;
+        const alpha = m.a * (0.7 + 0.3 * Math.sin(t * 0.9 + m.ph));
+        ctx.fillStyle = `rgba(200,220,255,${alpha.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(x, y, m.r, 0, 7);
+        ctx.fill();
+      }
+
       // 文明星点
       for (const s of stars) {
         const alpha = s.a * (0.72 + 0.28 * Math.sin(t * s.tw + s.ph));
@@ -173,6 +195,39 @@ export default function DarkForestField({ onTarget, onObserve, onCensus }) {
           ctx.arc(x, y, s.r + 5, 0, 7);
           ctx.stroke();
         }
+      }
+
+      // 星光十字闪耀(随机星点爆发衍射芒)
+      if (now >= nextFlare && stars.length) {
+        flares.push({ s: stars[Math.floor(Math.random() * stars.length)], t0: now });
+        nextFlare = now + rand(2200, 5200);
+      }
+      for (let i = flares.length - 1; i >= 0; i--) {
+        const f = flares[i];
+        const k = (now - f.t0) / 1200;
+        if (k >= 1) {
+          flares.splice(i, 1);
+          continue;
+        }
+        const amp = Math.sin(Math.PI * k);
+        const x = starX(f.s, t);
+        const y = starY(f.s, t);
+        const L = 6 + amp * 16;
+        ctx.strokeStyle = `rgba(235,245,255,${(amp * 0.8).toFixed(3)})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x - L, y);
+        ctx.lineTo(x + L, y);
+        ctx.moveTo(x, y - L);
+        ctx.lineTo(x, y + L);
+        ctx.stroke();
+        const g = ctx.createRadialGradient(x, y, 0, x, y, 7);
+        g.addColorStop(0, `rgba(255,255,255,${(amp * 0.9).toFixed(3)})`);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, 7, 0, 7);
+        ctx.fill();
       }
 
       // 流星
