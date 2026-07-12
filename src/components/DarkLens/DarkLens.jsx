@@ -21,6 +21,14 @@ uniform vec2 uCenter;
 uniform vec2 uRes;
 uniform float uRadius;
 varying vec2 vUv;
+// 带色散的单次采样(caO=色散偏移向量,像素)
+vec3 sampleCA(vec2 p, vec2 caO){
+  return vec3(
+    texture2D(uTex, (p - caO) / uRes).r,
+    texture2D(uTex, p / uRes).g,
+    texture2D(uTex, (p + caO) / uRes).b
+  );
+}
 void main(){
   vec2 frag = vUv * uRes;
   vec2 c = uCenter * uRes;
@@ -31,11 +39,15 @@ void main(){
   float k = mix(0.45, 1.0, rr);            // 采样压缩:中心放大~2.2x,边缘1x(无缝)
   float ca = 0.012 * r * r * uRadius;      // 色散(px),边缘增强
   vec2 nd = r > 0.0001 ? normalize(d) : vec2(0.0);
+  vec2 caO = nd * ca;
   vec2 base = c + d * k;
-  float cr = texture2D(uTex, (base - nd * ca) / uRes).r;
-  float cg = texture2D(uTex, base / uRes).g;
-  float cb = texture2D(uTex, (base + nd * ca) / uRes).b;
-  vec3 col = vec3(cr, cg, cb) * mix(1.18, 1.0, rr);   // 镜内聚光,边缘归一保无缝
+  // 4-tap 旋转网格超采样:消除放大重采样产生的摩尔纹(边缘 k→1 处走样最重,采样扩散随之加大)
+  float sp = mix(0.5, 1.0, rr);
+  vec3 acc = sampleCA(base + vec2( 0.25,  0.75) * sp, caO)
+           + sampleCA(base + vec2( 0.75, -0.25) * sp, caO)
+           + sampleCA(base + vec2(-0.25, -0.75) * sp, caO)
+           + sampleCA(base + vec2(-0.75,  0.25) * sp, caO);
+  vec3 col = acc * 0.25 * mix(1.18, 1.0, rr);   // 镜内聚光,边缘归一保无缝
   float rim = smoothstep(0.90, 0.995, r) * (1.0 - smoothstep(0.995, 1.0, r));
   col += vec3(0.55, 0.72, 1.0) * rim * 0.10;          // 极弱玻璃圈光
   gl_FragColor = vec4(col, 1.0);

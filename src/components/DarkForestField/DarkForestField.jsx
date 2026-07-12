@@ -93,13 +93,50 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus, onTarget,
     );
     census();
 
-    // 星云雾团 + 流星
+    // 深空背景(移植演算页 buildDeepSky 语言:旋涡星系+彩色星云+远景星点;比演算页暗一档,
+    // 让可猎杀的文明目标仍醒目。全画进同一张画布 → 侦察透镜放大时背景一并被放大,不露馅)
+    // ① 彩色星云雾团(缓慢漂移,配色同演算页深空)
     const wisps = [
-      { fx: 0.22, fy: 0.3, rF: 0.30, rgb: '90,130,210', a: 0.055, ang: rand(0, 7), sp: 0.0022 },
-      { fx: 0.72, fy: 0.62, rF: 0.26, rgb: '120,100,200', a: 0.05, ang: rand(0, 7), sp: 0.0018 },
-      { fx: 0.5, fy: 0.82, rF: 0.22, rgb: '80,120,190', a: 0.045, ang: rand(0, 7), sp: 0.0026 },
-      { fx: 0.88, fy: 0.18, rF: 0.2, rgb: '170,120,100', a: 0.04, ang: rand(0, 7), sp: 0.002 }
+      { fx: 0.20, fy: 0.28, rF: 0.34, rgb: '120,170,255', a: 0.07, ang: rand(0, 7), sp: 0.0020 },
+      { fx: 0.74, fy: 0.60, rF: 0.30, rgb: '158,120,255', a: 0.06, ang: rand(0, 7), sp: 0.0016 },
+      { fx: 0.5, fy: 0.85, rF: 0.26, rgb: '110,150,235', a: 0.05, ang: rand(0, 7), sp: 0.0024 },
+      { fx: 0.9, fy: 0.2, rF: 0.22, rgb: '255,168,120', a: 0.04, ang: rand(0, 7), sp: 0.0018 }
     ];
+    // ② 旋涡星系(离屏预渲染:倾斜盘面+暖白亮核,静止远景)
+    const makeGalaxyCanvas = () => {
+      const s = 256, cv = document.createElement('canvas');
+      cv.width = cv.height = s;
+      const g2 = cv.getContext('2d');
+      g2.translate(s / 2, s / 2);
+      g2.rotate(rand(0, Math.PI));
+      g2.scale(1, rand(0.3, 0.44));
+      g2.globalCompositeOperation = 'lighter';
+      let g = g2.createRadialGradient(0, 0, 0, 0, 0, s * 0.46);
+      g.addColorStop(0, 'rgba(190,214,255,0.5)');
+      g.addColorStop(0.25, 'rgba(150,185,255,0.22)');
+      g.addColorStop(1, 'rgba(110,145,255,0)');
+      g2.fillStyle = g; g2.beginPath(); g2.arc(0, 0, s * 0.46, 0, 7); g2.fill();
+      g = g2.createRadialGradient(0, 0, 0, 0, 0, s * 0.1);
+      g.addColorStop(0, 'rgba(255,245,230,0.9)');
+      g.addColorStop(1, 'rgba(255,235,210,0)');
+      g2.fillStyle = g; g2.beginPath(); g2.arc(0, 0, s * 0.1, 0, 7); g2.fill();
+      return cv;
+    };
+    const galaxies = [
+      { cv: makeGalaxyCanvas(), fx: 0.15, fy: 0.26, size: 300, a: 0.5 },
+      { cv: makeGalaxyCanvas(), fx: 0.85, fy: 0.72, size: 200, a: 0.4 },
+      { cv: makeGalaxyCanvas(), fx: 0.64, fy: 0.12, size: 150, a: 0.36 }
+    ];
+    // ③ 远景星点(小/暗/无光晕/不可交互,区别于可猎杀的文明星点)
+    const deepStars = Array.from(
+      { length: Math.round(Math.min(Math.max((window.innerWidth * window.innerHeight) / 5200, 120), 320)) },
+      () => ({
+        fx: Math.random(), fy: Math.random(),
+        r: rand(0.35, 1.0), a: rand(0.14, 0.5),
+        tw: rand(0.3, 1.2), ph: rand(0, 6.28),
+        warm: Math.random() < 0.12
+      })
+    );
     let meteor = null;
     let meteorNext = performance.now() + rand(6000, 14000);
 
@@ -280,6 +317,15 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus, onTarget,
         }
       }
 
+      // 旋涡星系(最底层远景,加色混合)
+      for (const gx of galaxies) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = gx.a;
+        ctx.drawImage(gx.cv, gx.fx * W - gx.size / 2, gx.fy * H - gx.size / 2, gx.size, gx.size);
+        ctx.restore();
+      }
+
       // 星云雾团
       for (const wsp of wisps) {
         wsp.fx += Math.cos(wsp.ang) * wsp.sp / 60;
@@ -298,6 +344,17 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus, onTarget,
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(x, y, r, 0, 7);
+        ctx.fill();
+      }
+
+      // 远景星点(不可交互的宇宙背景,比文明星点更小更暗、无光晕)
+      for (const ds of deepStars) {
+        const alpha = ds.a * (0.6 + 0.4 * Math.sin(t * ds.tw + ds.ph));
+        ctx.fillStyle = ds.warm
+          ? `rgba(255,205,175,${alpha.toFixed(3)})`
+          : `rgba(200,220,255,${alpha.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(ds.fx * W, ds.fy * H, ds.r, 0, 7);
         ctx.fill();
       }
 
