@@ -1,10 +1,9 @@
+import { useState } from 'react';
 import ProfileCard from '../components/ProfileCard/ProfileCard';
 
 const BASE = import.meta.env.BASE_URL;
 
-// 舰长档案(原著已核实:自然选择号舰长东方延绪/执行舰长章北海"前进四";
-// 黑暗战役中"终极规律"号先射次声波氢弹,褚岩的"蓝色空间"号预先抽真空幸存并反击)
-// 画像:public/assets/captains/<id>.png,现为占位剪影,GPT 成图后同名替换即可
+// 舰长档案(原著已核实;画像=用户 GPT 成图,public/assets/captains/<id>.webp)
 const CAPTAINS = [
   {
     id: 'zhangbeihai',
@@ -35,71 +34,45 @@ const CAPTAINS = [
   }
 ];
 
+// 单屏舰队页:2.5D 舰队为底(保留 iframe 指针交互,滚轮经 postMessage 翻模块),
+// 舰长档案 ProfileCard 紧凑版列于左上,悬停/点击切换下方档案详情
 export default function Fleet() {
+  const [active, setActive] = useState(CAPTAINS[0]);
+
   return (
-    <div className="h-dvh overflow-y-auto bg-[#02040c]">
-      {/* ===== 第一屏:2.5D 视差舰队(iframe 保留鼠标视差) ===== */}
-      <section className="relative h-dvh overflow-hidden">
-        <iframe
-          src={`${BASE}fleet-bg.html`}
-          title="星际舰队 · 2.5D"
-          className="absolute inset-0 h-full w-full border-0"
-        />
+    <section className="relative h-dvh overflow-hidden bg-[#02040c]">
+      <iframe
+        src={`${BASE}fleet-bg.html`}
+        title="星际舰队 · 2.5D"
+        className="absolute inset-0 h-full w-full border-0"
+      />
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex select-none flex-col items-center px-6 pt-24 text-center">
-          <p className="font-tech text-sm tracking-[0.6em] text-[#97c3ff]/70">FLEET · 末日之战</p>
-          <h1 className="mt-3 font-santi text-4xl text-white md:text-6xl [text-shadow:0_0_24px_rgba(151,195,255,0.35)]">
-            星际舰队
-          </h1>
-          <p className="mt-3 font-body text-sm text-[#C6CDDB]/75 md:text-base">
-            两千余艘恒星级战舰列阵太空,人类最后的无敌舰队
-          </p>
-        </div>
+      {/* 标题(右上,给左侧档案让位) */}
+      <div className="pointer-events-none absolute right-6 top-24 z-10 select-none text-right md:right-10">
+        <p className="font-tech text-sm tracking-[0.6em] text-[#97c3ff]/70">FLEET · 末日之战</p>
+        <h1 className="mt-2 font-santi text-4xl text-white md:text-5xl [text-shadow:0_0_24px_rgba(151,195,255,0.35)]">
+          星际舰队
+        </h1>
+        <p className="mt-2 font-body text-xs text-[#C6CDDB]/75 md:text-sm">
+          两千余艘恒星级战舰列阵太空
+        </p>
+      </div>
 
-        <div className="pointer-events-none absolute bottom-14 left-5 z-10 select-none md:bottom-16 md:left-8">
-          <p className="font-santi text-base tracking-[2px] text-[#FFCBB1] md:text-lg [text-shadow:0_0_16px_rgba(255,162,106,0.35)]">
-            前进!前进!!不择手段地前进!
-          </p>
-          <p className="mt-1 font-tech text-[10px] tracking-[0.3em] text-white/35">
-            ADVANCE, BY ANY MEANS NECESSARY
-          </p>
-        </div>
-
-        <div className="pointer-events-none absolute bottom-14 right-5 z-10 select-none text-right font-tech text-[11px] tracking-[0.2em] text-white/45 md:bottom-16 md:right-8">
-          <p>
-            WARSHIPS <span className="text-[#97C3FF]">2000+</span>
-          </p>
-          <p className="mt-1">
-            FORMATION · <span className="text-[#97C3FF]">矩形阵列</span>
-          </p>
-          <p className="mt-1">
-            TARGET · <span className="text-[#FFA26A]">强互作用力探测器「水滴」</span>
-          </p>
-        </div>
-
-        {/* 向下滚动提示 */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 select-none text-center">
-          <p className="animate-bounce font-tech text-xs tracking-[0.4em] text-white/35">
-            ↓ 舰长档案
-          </p>
-        </div>
-      </section>
-
-      {/* ===== 第二屏:舰长档案(ProfileCard 全息卡 + 简介/战略抉择) ===== */}
-      <section className="relative min-h-dvh px-6 py-24">
-        <div className="flex select-none flex-col items-center text-center">
-          <p className="font-tech text-sm tracking-[0.6em] text-[#97c3ff]/70">THE CAPTAINS</p>
-          <h2 className="mt-3 font-santi text-3xl text-white md:text-5xl [text-shadow:0_0_24px_rgba(151,195,255,0.3)]">
-            舰长档案
-          </h2>
-          <p className="mt-3 font-body text-xs text-[#8A93A8] md:text-sm">
-            他们的命令与选择,决定了人类火种的去向
-          </p>
-        </div>
-
-        <div className="mx-auto mt-16 grid max-w-6xl grid-cols-1 gap-16 lg:grid-cols-3 lg:gap-10">
+      {/* 舰长档案:左上排列(紧凑全息卡)+档案详情 */}
+      <div className="absolute left-4 top-20 z-10 md:left-6">
+        <p className="mb-2 select-none font-tech text-[10px] tracking-[0.4em] text-[#97C3FF]/60">
+          THE CAPTAINS · 舰长档案
+        </p>
+        <div className="flex gap-3">
           {CAPTAINS.map(c => (
-            <div key={c.id} className="flex flex-col items-center">
+            <div
+              key={c.id}
+              className={`pc-mini cursor-pointer transition-opacity duration-300 ${
+                active.id === c.id ? 'opacity-100' : 'opacity-55 hover:opacity-85'
+              }`}
+              onMouseEnter={() => setActive(c)}
+              onClick={() => setActive(c)}
+            >
               <ProfileCard
                 name={c.name}
                 title={c.ship}
@@ -109,26 +82,48 @@ export default function Fleet() {
                 behindGlowEnabled
                 behindGlowColor={c.glow}
                 innerGradient={c.gradient}
-                avatarUrl={`${BASE}assets/captains/${c.id}.png`}
+                avatarUrl={`${BASE}assets/captains/${c.id}.webp`}
                 iconUrl=""
                 grainUrl=""
               />
-              <div className="liquid-glass mt-6 w-full max-w-[390px] rounded-2xl px-5 py-4">
-                <p className="font-tech text-[10px] tracking-[0.3em] text-[#97C3FF]/60">PROFILE · 简介</p>
-                <p className="mt-1.5 font-body text-xs leading-relaxed text-[#c6d6ef] md:text-sm">
-                  {c.bio}
-                </p>
-                <p className="mt-3 font-tech text-[10px] tracking-[0.3em] text-[#FFA26A]/70">
-                  STRATEGIC OBJECTIVE · 命令与选择
-                </p>
-                <p className="mt-1.5 font-body text-xs leading-relaxed text-[#9db0cc] md:text-sm">
-                  {c.order}
-                </p>
-              </div>
             </div>
           ))}
         </div>
-      </section>
-    </div>
+        {/* 档案详情(液态玻璃,跟随所选舰长) */}
+        <div className="liquid-glass mt-3 w-[min(660px,72vw)] select-none rounded-2xl px-5 py-4">
+          <p className="font-tech text-[10px] tracking-[0.3em] text-[#97C3FF]/60">
+            PROFILE · {active.name} · {active.ship}
+          </p>
+          <p className="mt-1.5 font-body text-xs leading-relaxed text-[#c6d6ef]">{active.bio}</p>
+          <p className="mt-2.5 font-tech text-[10px] tracking-[0.3em] text-[#FFA26A]/70">
+            STRATEGIC OBJECTIVE · 命令与选择
+          </p>
+          <p className="mt-1.5 font-body text-xs leading-relaxed text-[#9db0cc]">{active.order}</p>
+        </div>
+      </div>
+
+      {/* 左下:引文 */}
+      <div className="pointer-events-none absolute bottom-8 left-5 z-10 select-none md:left-8">
+        <p className="font-santi text-base tracking-[2px] text-[#FFCBB1] md:text-lg [text-shadow:0_0_16px_rgba(255,162,106,0.35)]">
+          前进!前进!!不择手段地前进!
+        </p>
+        <p className="mt-1 font-tech text-[10px] tracking-[0.3em] text-white/35">
+          ADVANCE, BY ANY MEANS NECESSARY
+        </p>
+      </div>
+
+      {/* 右下:舰队 HUD 读数 */}
+      <div className="pointer-events-none absolute bottom-8 right-5 z-10 select-none text-right font-tech text-[11px] tracking-[0.2em] text-white/45 md:right-8">
+        <p>
+          WARSHIPS <span className="text-[#97C3FF]">2000+</span>
+        </p>
+        <p className="mt-1">
+          FORMATION · <span className="text-[#97C3FF]">矩形阵列</span>
+        </p>
+        <p className="mt-1">
+          TARGET · <span className="text-[#FFA26A]">强互作用力探测器「水滴」</span>
+        </p>
+      </div>
+    </section>
   );
 }

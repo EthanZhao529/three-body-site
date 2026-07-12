@@ -47,6 +47,18 @@ function WheelNav() {
       }
       return false;
     };
+    const flip = dy => {
+      if (lock || Math.abs(dy) < 20) return;
+      const idx = ROUTE_ORDER.indexOf(locRef.current);
+      if (idx === -1) return;
+      const next = idx + (dy > 0 ? 1 : -1);
+      if (next < 0 || next >= ROUTE_ORDER.length) return;
+      lock = true;
+      navigate(ROUTE_ORDER[next]);
+      setTimeout(() => {
+        lock = false;
+      }, 1100);
+    };
     const onWheel = e => {
       if (e.ctrlKey) return;                       // 缩放手势放行
       const idx = ROUTE_ORDER.indexOf(locRef.current);
@@ -54,23 +66,33 @@ function WheelNav() {
       if (Math.abs(e.deltaY) < 20) return;
       if (canScrollMore(e.target, e.deltaY)) return;
       e.preventDefault();
-      if (lock) return;
-      const next = idx + (e.deltaY > 0 ? 1 : -1);
-      if (next < 0 || next >= ROUTE_ORDER.length) return;
-      lock = true;
-      navigate(ROUTE_ORDER[next]);
-      setTimeout(() => {
-        lock = false;
-      }, 1000);
+      flip(e.deltaY);
+    };
+    // iframe 页(舰队 2.5D/水滴复刻)内滚轮经 postMessage 转发到这里
+    const onMsg = e => {
+      if (e.data && e.data.type === 'tb-wheel') flip(e.data.deltaY);
     };
     window.addEventListener('wheel', onWheel, { passive: false });
-    return () => window.removeEventListener('wheel', onWheel);
+    window.addEventListener('message', onMsg);
+    return () => {
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('message', onMsg);
+    };
   }, [navigate]);
   return null;
 }
 
 function Chrome() {
   const location = useLocation();
+  // 翻页方向(下翻=新页从下方弹入,上翻=从上方弹入;导航点击也按路由序判向)
+  const prevRef = useRef(location.pathname);
+  const dirRef = useRef(1);
+  if (prevRef.current !== location.pathname) {
+    const a = ROUTE_ORDER.indexOf(prevRef.current);
+    const b = ROUTE_ORDER.indexOf(location.pathname);
+    dirRef.current = a === -1 || b === -1 || b >= a ? 1 : -1;
+    prevRef.current = location.pathname;
+  }
 
   return (
     <ClickSpark sparkColor="#FFCBB1" sparkRadius={22} sparkCount={8} duration={450}>
@@ -98,8 +120,8 @@ function Chrome() {
         <HudNav />
 
         <main className="relative z-10">
-          {/* 模块翻页过渡:按路径重挂并播放入场 */}
-          <div key={location.pathname} className="route-fade">
+          {/* 模块翻页过渡:按路径重挂,弹性入场(带方向) */}
+          <div key={location.pathname} className={dirRef.current > 0 ? 'route-elastic-up' : 'route-elastic-down'}>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/fleet" element={<Fleet />} />

@@ -286,5 +286,13 @@ if (CFG.grain) {
   setInterval(() => { el.style.backgroundPosition = (Math.random()*128|0) + 'px ' + (Math.random()*128|0) + 'px'; }, 80);
 } else document.getElementById('grain').style.display = 'none';
 </script>
+<script>
+/* 站点内嵌:滚轮转发给父页(模块间翻页由主站 WheelNav 处理) */
+addEventListener('wheel', function (e) {
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: 'tb-wheel', deltaY: e.deltaY }, '*');
+  }
+}, { passive: true });
+</script>
 </body>
 </html>

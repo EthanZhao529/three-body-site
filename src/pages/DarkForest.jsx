@@ -111,8 +111,8 @@ export default function DarkForest() {
       {/* 液态玻璃情报卡 */}
       <IntelCard target={target} />
 
-      {/* 顶部:标题+操作提示 */}
-      <div className="pointer-events-none relative z-10 flex select-none flex-col items-center px-6 pt-24 text-center">
+      {/* 顶部:标题+操作提示(绝对定位+独立合成层:与背景呼吸/玻璃折光完全隔离,防上下跳动) */}
+      <div className="pointer-events-none absolute inset-x-0 top-24 z-10 flex select-none flex-col items-center px-6 text-center [transform:translateZ(0)]">
         <p className="font-tech text-sm tracking-[0.6em] text-[#97c3ff]/70">
           DARK FOREST · 宇宙社会学
         </p>

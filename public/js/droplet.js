@@ -16,9 +16,10 @@ import { Pass, FullScreenQuad } from './vendor/jsm/postprocessing/Pass.js';
 
 /* ==================== 用户配置(project.json 默认值) ==================== */
 const CFG = {
-  clock: '12h',            // '12h' | '24h' | 'none'
-  era: 'AD',               // 'AD' 公元 | 'CE' 危机纪元 | 'SD' 水滴 | 'none'
-  formula: true,           // 钟慢公式
+  // ⭐站点实装(2026-07-13 用户需求):时间/日期/公式(坐标)模块全部关闭,开场关闭秒进
+  clock: 'none',           // '12h' | '24h' | 'none'
+  era: 'none',             // 'AD' 公元 | 'CE' 危机纪元 | 'SD' 水滴 | 'none'
+  formula: false,          // 钟慢公式
   formulaOpacity: 0.2,     // 公式透明度
   cursorRotation: true,    // 光标控制旋转
   rx: 50, ry: 6,           // 关闭光标旋转时的固定偏航/俯仰(度)
@@ -27,7 +28,7 @@ const CFG = {
   audioflashing: true,     // 音频闪烁(godrays+亮度脉动)
   rgb: false,              // RGB 效果
   rgbLow: [0.0824, 0, 1], rgbHigh: [1, 0, 0],
-  movie: true,             // 开场动画
+  movie: false,            // 开场动画(站点内嵌翻页流,秒进)
   ring: false,             // 尾部扩散光环
   ringColor: [0.2627, 0.6196, 1], ringBrightness: 5, ringPeriod: 0.5, ringSize: 0.002,
   px: 0, py: 0,            // 世界位置微调(壁纸滑条)
@@ -355,7 +356,9 @@ const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), CFG.hdr * CAL.blo
 composer.addPass(bloomPass);   // WE:scene HDR 泛光最后作用(效果层吃泛光前画面)
 
 /* ==================== 音频(16 段频谱,WE 公式原样) ==================== */
-const audio = new Audio('assets/droplet/bgm.ogg');
+const audio = new Audio();
+audio.preload = 'none';                 // 3.7MB BGM 不随页面预载,点击播放时才拉
+audio.src = 'assets/droplet/bgm.ogg';
 audio.loop = true;
 let analyser = null, freq = null;
 const bands = new Float32Array(16);
