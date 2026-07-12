@@ -11,6 +11,51 @@
 
 <canvas id="gl"></canvas>
 
+<!-- 全站导航(主站 HudNav 的原生复刻;pointerdown 不下传,避免误触发拖拽视角) -->
+<nav id="siteNav">
+  <div class="sn-bar">
+    <span class="sn-corner sn-cl" aria-hidden="true"></span>
+    <span class="sn-corner sn-cr" aria-hidden="true"></span>
+    <a class="sn-brand" href="./">
+      <span class="sn-led" aria-hidden="true"></span>
+      <span class="sn-name">三体宇宙</span>
+      <span class="sn-en">THREE-BODY</span>
+    </a>
+    <div class="sn-items">
+      <a href="./"><span class="zh" data-t="首页">首页</span><span class="en">HOME</span></a>
+      <a href="./fleet"><span class="zh" data-t="舰队">舰队</span><span class="en">FLEET</span></a>
+      <a href="./chaos"><span class="zh" data-t="乱纪元">乱纪元</span><span class="en">CHAOS</span></a>
+      <a href="./dark-forest"><span class="zh" data-t="黑暗森林">黑暗森林</span><span class="en">FOREST</span></a>
+      <a href="./droplet"><span class="zh" data-t="水滴">水滴</span><span class="en">DROPLET</span></a>
+      <a href="./2d-foil"><span class="zh" data-t="二向箔">二向箔</span><span class="en">FOIL</span></a>
+      <span class="sn-live"><i aria-hidden="true"></i>实时演算</span>
+    </div>
+    <div class="sn-status">
+      <span>SYS·ONLINE</span>
+      <span id="snClock" class="sn-clock">--:--:--</span>
+    </div>
+    <button id="snBurger" type="button" aria-label="打开导航">
+      <i></i><i></i><i></i>
+    </button>
+  </div>
+  <div class="sn-line" aria-hidden="true"></div>
+  <div id="snMenu" class="sn-menu" hidden>
+    <div class="sn-menu-top">
+      <span>NAVIGATION</span>
+      <button id="snClose" type="button" aria-label="关闭导航">✕</button>
+    </div>
+    <div class="sn-menu-items">
+      <a href="./">首页<span>HOME</span></a>
+      <a href="./fleet">舰队<span>FLEET</span></a>
+      <a href="./chaos">乱纪元<span>CHAOS</span></a>
+      <a href="./dark-forest">黑暗森林<span>FOREST</span></a>
+      <a href="./droplet">水滴<span>DROPLET</span></a>
+      <a href="./2d-foil">二向箔<span>FOIL</span></a>
+      <span class="sn-menu-live">实时演算 · 当前页</span>
+    </div>
+  </div>
+</nav>
+
 <!-- HUD(机甲切角面板风,参照主站 React Bits 设计语言) -->
 <div id="hud">
   <!-- 左侧信息栏 -->
@@ -64,7 +109,41 @@
   <div class="boot-status" id="bootStatus">系统启动中</div>
 </div>
 
-<a class="back-home" href="index.html">THREE-BODY · SITE</a>
+<script>
+/* 导航自包含逻辑:时钟 / 悬停乱码重解 / 移动端菜单 / 阻断拖拽误触 */
+(function () {
+  var nav = document.getElementById('siteNav');
+  nav.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+
+  var ck = document.getElementById('snClock');
+  function tick() {
+    var d = new Date(), p = function (n) { return String(n).padStart(2, '0'); };
+    ck.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  var CH = '01三体智子乱紀元恒·+-×';
+  document.querySelectorAll('#siteNav .sn-items .zh').forEach(function (el) {
+    var orig = el.dataset.t, timer = null;
+    el.parentElement.addEventListener('mouseenter', function () {
+      if (timer) clearInterval(timer);
+      var n = orig.length, step = 0;
+      timer = setInterval(function () {
+        step++;
+        var reveal = Math.floor(step / 3), s = '';
+        for (var j = 0; j < n; j++) s += j < reveal ? orig[j] : CH[Math.floor(Math.random() * CH.length)];
+        el.textContent = s;
+        if (reveal >= n) { clearInterval(timer); timer = null; el.textContent = orig; }
+      }, 40);
+    });
+  });
+
+  var menu = document.getElementById('snMenu');
+  document.getElementById('snBurger').addEventListener('click', function () { menu.hidden = false; });
+  document.getElementById('snClose').addEventListener('click', function () { menu.hidden = true; });
+})();
+</script>
 
 <script type="importmap">
 { "imports": { "three": "./js/vendor/three.module.js" } }
