@@ -87,10 +87,11 @@ const REVEAL_MASK =
 // 保留状态灯/SEC 编号/宇宙坐标/幽灵编号水印/悬停乱码解密
 function SectorCard({ c }) {
   const accent = c.gold ? '#FFA26A' : '#97C3FF';
-  const cls = `glass-sheen group pointer-events-auto relative block overflow-hidden rounded-2xl border px-4 pb-4 pt-2.5 backdrop-blur-xl transition-all duration-300 ${
+  // iOS 纯透明液玻:无边框,悬停用 drop-shadow 泛光(保住玻璃内高光)
+  const cls = `liquid-glass glass-sheen group pointer-events-auto relative block overflow-hidden rounded-3xl px-4 pb-4 pt-2.5 transition-all duration-300 ${
     c.gold
-      ? 'border-[#FFA26A]/25 bg-gradient-to-br from-[#FFA26A]/10 via-[#140e06]/25 to-[#FFA26A]/5 shadow-[inset_0_1px_0_rgba(255,220,190,0.22)] hover:border-[#FFA26A]/70 hover:shadow-[inset_0_1px_0_rgba(255,220,190,0.32),0_0_24px_rgba(255,162,106,0.28)]'
-      : 'border-[#97C3FF]/20 bg-gradient-to-br from-[#97C3FF]/10 via-[#0a1428]/25 to-[#97C3FF]/5 shadow-[inset_0_1px_0_rgba(220,235,255,0.22)] hover:border-[#97C3FF]/60 hover:shadow-[inset_0_1px_0_rgba(220,235,255,0.32),0_0_24px_rgba(151,195,255,0.28)]'
+      ? 'hover:drop-shadow-[0_0_22px_rgba(255,162,106,0.35)]'
+      : 'hover:drop-shadow-[0_0_22px_rgba(151,195,255,0.32)]'
   }`;
   const inner = (
     <>

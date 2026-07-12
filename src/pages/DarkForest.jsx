@@ -3,9 +3,8 @@ import DarkForestField from '../components/DarkForestField/DarkForestField';
 
 const BASE = import.meta.env.BASE_URL;
 
-// 玻璃小面板(与全站玻璃语言一致)
-const glassPanel =
-  'rounded-xl border border-[#97C3FF]/15 bg-gradient-to-br from-[#97C3FF]/10 via-[#0a1428]/25 to-transparent px-4 py-3 shadow-[inset_0_1px_0_rgba(220,235,255,0.18)] backdrop-blur-md';
+// 玻璃小面板(iOS 纯透明液玻,无边框)
+const glassPanel = 'liquid-glass rounded-2xl px-4 py-3';
 
 // 情报卡定位:跟随目标星,右侧偏移并夹取在视口内
 const anchorStyle = (sx, sy, w, h) => ({
@@ -110,6 +109,27 @@ export default function DarkForest() {
     const el = scrollRef.current;
     el?.scrollTo({ top: i * el.clientHeight, behavior: 'smooth' });
   };
+  // 鼠标滚轮翻页:一次滚轮=翻一整页,翻页动画期间锁定;边界放行原生滚动(页脚可达)
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return undefined;
+    let lock = false;
+    const onWheel = e => {
+      const cur = Math.round(el.scrollTop / el.clientHeight);
+      const dir = e.deltaY > 0 ? 1 : -1;
+      const next = Math.min(Math.max(cur + dir, 0), PAGES.length - 1);
+      if (next === cur) return;
+      e.preventDefault();
+      if (lock || Math.abs(e.deltaY) < 10) return;
+      lock = true;
+      el.scrollTo({ top: next * el.clientHeight, behavior: 'smooth' });
+      setTimeout(() => {
+        lock = false;
+      }, 800);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
   // 鼠标视差(仅背景层,叠加在 img 的呼吸缩放之外)
   const onMove = e => {
     const el = bgRef.current;

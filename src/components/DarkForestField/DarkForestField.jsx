@@ -41,16 +41,19 @@ export default function DarkForestField({ onTarget, onObserve, onCensus }) {
           tech: 'K-' + (0.4 + si * 0.32 + rand(0, 0.28)).toFixed(2),
           threat: si <= 1 ? ['低', '#8fd9a8'] : si <= 3 ? ['中', '#e8c66a'] : si === 4 ? ['高', '#ffa26a'] : ['极高', '#ff5a3c']
         },
-        r: rand(0.9, 2.4),
-        a: rand(0.55, 0.95),
-        tw: rand(0.4, 1.8),
+        // 隐匿:建模/大小/颜色贴近 8K 背景星点(小、无光晕、近白),仅靠周期性微光暴露
+        r: rand(0.5, 1.3),
+        a: rand(0.35, 0.7),
+        tw: rand(0.3, 1.2),
         ph: rand(0, Math.PI * 2),
         ph2: rand(0, Math.PI * 2),
-        warm: Math.random() < 0.18
+        gp: rand(3.5, 8),          // 微光周期(秒)
+        gph: rand(0, 8),           // 微光相位
+        warm: Math.random() < 0.15
       };
     };
-    const starX = (s, t) => s.fx * W + Math.sin(t * 0.25 + s.ph2) * 3.5;
-    const starY = (s, t) => s.fy * H + Math.cos(t * 0.21 + s.ph2) * 2.5;
+    const starX = (s, t) => s.fx * W + Math.sin(t * 0.25 + s.ph2) * 1.2;
+    const starY = (s, t) => s.fy * H + Math.cos(t * 0.21 + s.ph2) * 0.9;
 
     const census = () => cbRef.current.onCensus?.({ alive: stars.length, observed: observed.size });
 
@@ -71,20 +74,7 @@ export default function DarkForestField({ onTarget, onObserve, onCensus }) {
     );
     census();
 
-    // 流星(偶发划过)
-    let meteor = null;
-    let meteorNext = performance.now() + rand(5000, 12000);
-
-    // 星光闪耀(随机星点周期性爆出十字衍射芒)
-    const flares = [];
-    let nextFlare = performance.now() + rand(1500, 4000);
-
-    // 漂浮尘埃(缓慢上飘,时间驱动无状态回绕)
-    const motes = Array.from({ length: 30 }, () => ({
-      x0: Math.random(), y0: Math.random(),
-      vx: rand(-0.008, 0.008), vy: rand(-0.014, -0.004),
-      r: rand(0.5, 1.3), a: rand(0.05, 0.16), ph: rand(0, 6.28)
-    }));
+    // (尘埃/十字闪耀/流星等低级动效已按用户要求移除;隐匿星点只靠周期微光暴露)
 
     const toLocal = e => {
       const r = canvas.getBoundingClientRect();
@@ -159,33 +149,18 @@ export default function DarkForestField({ onTarget, onObserve, onCensus }) {
       ctx.clearRect(0, 0, W, H);           // 透明,露出下方 8K 星空背景
       const t = now / 1000;
 
-      // 漂浮尘埃(最底层,缓慢上飘微闪)
-      for (const m of motes) {
-        const x = (((m.x0 + m.vx * t) % 1) + 1) % 1 * W;
-        const y = (((m.y0 + m.vy * t) % 1) + 1) % 1 * H;
-        const alpha = m.a * (0.7 + 0.3 * Math.sin(t * 0.9 + m.ph));
-        ctx.fillStyle = `rgba(200,220,255,${alpha.toFixed(3)})`;
-        ctx.beginPath();
-        ctx.arc(x, y, m.r, 0, 7);
-        ctx.fill();
-      }
-
-      // 文明星点
+      // 文明星点(隐匿:无光晕、贴背景大小与近白配色;周期性微光是唯一破绽)
       for (const s of stars) {
-        const alpha = s.a * (0.72 + 0.28 * Math.sin(t * s.tw + s.ph));
         const x = starX(s, t);
         const y = starY(s, t);
-        const c = s.warm ? '255,190,150' : '190,215,255';
-        const g = ctx.createRadialGradient(x, y, 0, x, y, s.r * 6);
-        g.addColorStop(0, `rgba(${c},${(alpha * 0.5).toFixed(3)})`);
-        g.addColorStop(1, `rgba(${c},0)`);
-        ctx.fillStyle = g;
+        // 微光:每 gp 秒短暂增亮一次(正弦包络,峰值克制)
+        const gk = ((t + s.gph) % s.gp) / s.gp;
+        const glint = gk < 0.12 ? Math.sin((Math.PI * gk) / 0.12) : 0;
+        const alpha = Math.min(s.a * (0.85 + 0.15 * Math.sin(t * s.tw + s.ph)) + glint * 0.55, 1);
+        const c = s.warm ? '255,222,200' : '224,235,255';
+        ctx.fillStyle = `rgba(${c},${alpha.toFixed(3)})`;
         ctx.beginPath();
-        ctx.arc(x, y, s.r * 6, 0, 7);
-        ctx.fill();
-        ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
-        ctx.beginPath();
-        ctx.arc(x, y, s.r, 0, 7);
+        ctx.arc(x, y, s.r + glint * 0.7, 0, 7);
         ctx.fill();
         // 已观测标记:细金环
         if (observed.has(s.coordStr)) {
@@ -193,75 +168,6 @@ export default function DarkForestField({ onTarget, onObserve, onCensus }) {
           ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.arc(x, y, s.r + 5, 0, 7);
-          ctx.stroke();
-        }
-      }
-
-      // 星光十字闪耀(随机星点爆发衍射芒)
-      if (now >= nextFlare && stars.length) {
-        flares.push({ s: stars[Math.floor(Math.random() * stars.length)], t0: now });
-        nextFlare = now + rand(2200, 5200);
-      }
-      for (let i = flares.length - 1; i >= 0; i--) {
-        const f = flares[i];
-        const k = (now - f.t0) / 1200;
-        if (k >= 1) {
-          flares.splice(i, 1);
-          continue;
-        }
-        const amp = Math.sin(Math.PI * k);
-        const x = starX(f.s, t);
-        const y = starY(f.s, t);
-        const L = 6 + amp * 16;
-        ctx.strokeStyle = `rgba(235,245,255,${(amp * 0.8).toFixed(3)})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(x - L, y);
-        ctx.lineTo(x + L, y);
-        ctx.moveTo(x, y - L);
-        ctx.lineTo(x, y + L);
-        ctx.stroke();
-        const g = ctx.createRadialGradient(x, y, 0, x, y, 7);
-        g.addColorStop(0, `rgba(255,255,255,${(amp * 0.9).toFixed(3)})`);
-        g.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(x, y, 7, 0, 7);
-        ctx.fill();
-      }
-
-      // 流星
-      if (!meteor && now >= meteorNext) {
-        const fromLeft = Math.random() < 0.5;
-        meteor = {
-          x0: fromLeft ? -60 : W * rand(0.3, 1),
-          y0: fromLeft ? H * rand(0, 0.5) : -60,
-          ang: fromLeft ? rand(0.15, 0.5) : rand(1.0, 1.6),
-          sp: rand(700, 1100),
-          t0: now,
-          dur: rand(1100, 1700)
-        };
-      }
-      if (meteor) {
-        const k = (now - meteor.t0) / meteor.dur;
-        if (k >= 1) {
-          meteor = null;
-          meteorNext = now + rand(9000, 22000);
-        } else {
-          const dist = meteor.sp * (now - meteor.t0) / 1000;
-          const hx = meteor.x0 + Math.cos(meteor.ang) * dist;
-          const hy = meteor.y0 + Math.sin(meteor.ang) * dist;
-          const tx2 = hx - Math.cos(meteor.ang) * 90;
-          const ty2 = hy - Math.sin(meteor.ang) * 90;
-          const fade = Math.sin(Math.min(k * 2, 1) * Math.PI / 2) * (1 - k);
-          const g = ctx.createLinearGradient(tx2, ty2, hx, hy);
-          g.addColorStop(0, 'rgba(170,205,255,0)');
-          g.addColorStop(1, `rgba(210,230,255,${(0.55 * fade).toFixed(3)})`);
-          ctx.strokeStyle = g;
-          ctx.lineWidth = 1.2;
-          ctx.beginPath();
-          ctx.moveTo(tx2, ty2);
-          ctx.lineTo(hx, hy);
           ctx.stroke();
         }
       }
