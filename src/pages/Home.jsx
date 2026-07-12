@@ -82,64 +82,43 @@ const QUOTES = [
 const REVEAL_MASK =
   'radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,1) 0px, rgba(255,255,255,0.95) 80px, rgba(255,255,255,0.6) 160px, rgba(255,255,255,0.25) 240px, rgba(255,255,255,0) 320px)';
 
-// 机甲切角面板(右上/左下 45° 切角)
-const PANEL_CUT =
-  'polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px))';
-
-// 面板内衬:扫描线 + 纵向暗渐变
-const panelBg = gold => ({
-  clipPath: PANEL_CUT,
-  backgroundImage: gold
-    ? 'repeating-linear-gradient(0deg, rgba(255,162,106,0.04) 0 1px, transparent 1px 3px), linear-gradient(to bottom, rgba(22,17,10,0.94), rgba(8,6,3,0.94))'
-    : 'repeating-linear-gradient(0deg, rgba(151,195,255,0.04) 0 1px, transparent 1px 3px), linear-gradient(to bottom, rgba(9,18,34,0.94), rgba(4,7,13,0.94))'
-});
-
-// 机甲 HUD 卡:切角边框层+面板层+状态灯+幽灵编号水印+斜纹警示条
+// 科幻玻璃 HUD 卡(FluidGlass 质感的原生实现):
+// 背后画面实时模糊折光(backdrop-blur)+顶棱高光+悬停扫光(.glass-sheen)
+// 保留状态灯/SEC 编号/宇宙坐标/幽灵编号水印/悬停乱码解密
 function SectorCard({ c }) {
   const accent = c.gold ? '#FFA26A' : '#97C3FF';
-  const edge = c.gold ? 'rgba(122,90,64,0.85)' : 'rgba(37,63,110,0.85)';
-  const cls = `group pointer-events-auto relative block transition-all duration-200 ${
+  const cls = `glass-sheen group pointer-events-auto relative block overflow-hidden rounded-2xl border px-4 pb-4 pt-2.5 backdrop-blur-xl transition-all duration-300 ${
     c.gold
-      ? 'hover:drop-shadow-[0_0_14px_rgba(255,162,106,0.45)]'
-      : 'hover:drop-shadow-[0_0_14px_rgba(151,195,255,0.4)]'
+      ? 'border-[#FFA26A]/25 bg-gradient-to-br from-[#FFA26A]/10 via-[#140e06]/25 to-[#FFA26A]/5 shadow-[inset_0_1px_0_rgba(255,220,190,0.22)] hover:border-[#FFA26A]/70 hover:shadow-[inset_0_1px_0_rgba(255,220,190,0.32),0_0_24px_rgba(255,162,106,0.28)]'
+      : 'border-[#97C3FF]/20 bg-gradient-to-br from-[#97C3FF]/10 via-[#0a1428]/25 to-[#97C3FF]/5 shadow-[inset_0_1px_0_rgba(220,235,255,0.22)] hover:border-[#97C3FF]/60 hover:shadow-[inset_0_1px_0_rgba(220,235,255,0.32),0_0_24px_rgba(151,195,255,0.28)]'
   }`;
   const inner = (
     <>
+      {/* 幽灵编号水印 */}
       <span
         aria-hidden="true"
-        className="absolute inset-0 opacity-70 transition-opacity duration-200 group-hover:opacity-100"
-        style={{ clipPath: PANEL_CUT, background: edge }}
-      />
-      <span aria-hidden="true" className="absolute inset-px" style={panelBg(c.gold)} />
-      <span className="relative block px-4 pb-4 pt-2.5" style={{ clipPath: PANEL_CUT }}>
-        {/* 幽灵编号水印(机体涂装) */}
+        className="pointer-events-none absolute bottom-1 right-4 select-none font-orbit text-5xl font-black leading-none text-white/[0.07]"
+      >
+        {c.code}
+      </span>
+      {/* 状态灯 + 标签行 */}
+      <span className="flex items-center gap-2 border-b border-white/10 pb-1.5">
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-1 right-4 select-none font-orbit text-5xl font-black leading-none text-white/[0.06]"
-        >
-          {c.code}
-        </span>
-        {/* 状态灯 + 标签行 */}
-        <span className="flex items-center gap-2 border-b border-white/10 pb-1.5">
-          <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse" style={{ backgroundColor: accent }} />
-          <span className="font-tech text-[10px] tracking-[0.25em]" style={{ color: accent }}>
-            {c.label}
-          </span>
-          <span className="ml-auto font-tech text-[9px] tracking-[0.2em] text-white/35">
-            SEC·{c.code}
-          </span>
-        </span>
-        <span className="mt-2 block font-santi text-lg text-white md:text-xl">{dTitle(c.title)}</span>
-        <span className="mt-1 flex items-baseline justify-between gap-2">
-          <span className="truncate font-body text-xs text-[#8A93A8]">{c.desc}</span>
-          <span className="shrink-0 font-tech text-[9px] text-[#5B86C9]">{c.coord}</span>
-        </span>
-        {/* 底部斜纹警示条 */}
-        <span
-          aria-hidden="true"
-          className="absolute inset-x-0 bottom-0 h-[3px] opacity-40"
-          style={{ backgroundImage: `repeating-linear-gradient(45deg, ${accent} 0 6px, transparent 6px 12px)` }}
+          className="h-1.5 w-1.5 animate-pulse rounded-full"
+          style={{ backgroundColor: accent, boxShadow: `0 0 8px ${accent}` }}
         />
+        <span className="font-tech text-[10px] tracking-[0.25em]" style={{ color: accent }}>
+          {c.label}
+        </span>
+        <span className="ml-auto font-tech text-[9px] tracking-[0.2em] text-white/35">
+          SEC·{c.code}
+        </span>
+      </span>
+      <span className="mt-2 block font-santi text-lg text-white md:text-xl">{dTitle(c.title)}</span>
+      <span className="mt-1 flex items-baseline justify-between gap-2">
+        <span className="truncate font-body text-xs text-[#9db0cc]">{c.desc}</span>
+        <span className="shrink-0 font-tech text-[9px] text-[#7FA5D9]">{c.coord}</span>
       </span>
     </>
   );

@@ -47,6 +47,26 @@
 .title-rise {
   animation: title-rise 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+/* 科幻玻璃卡片:悬停触发一次斜向扫光(FluidGlass 质感的原生实现) */
+.glass-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 34%, rgba(255,255,255,.08) 46%, rgba(190,225,255,.16) 50%, rgba(255,255,255,.08) 54%, transparent 66%);
+  background-size: 240% 100%;
+  background-repeat: no-repeat;
+  background-position: 180% 0;
+}
+.glass-sheen:hover::after {
+  animation: glass-sweep-once 0.9s ease forwards;
+}
+@keyframes glass-sweep-once {
+  from { background-position: 180% 0; }
+  to { background-position: -180% 0; }
+}
+
 /* HUD 导航移动端菜单:交错入场 */
 @keyframes nav-stagger {
   from { opacity: 0; transform: translateY(14px); }

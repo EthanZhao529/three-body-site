@@ -48,7 +48,7 @@ export default function HudNav() {
 
   return (
     <header className="fixed inset-x-0 top-0 z-30 select-none">
-      <div className="relative flex h-12 items-center justify-between bg-black/45 px-4 backdrop-blur-md md:px-6">
+      <div className="relative flex h-12 items-center justify-between bg-gradient-to-b from-[#97C3FF]/[0.07] to-black/40 px-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] backdrop-blur-md md:px-6">
         {/* 两端 HUD 角标 */}
         <span aria-hidden="true" className="absolute left-0 top-0 h-2.5 w-2.5 border-l-2 border-t-2 border-[#97C3FF]/60" />
         <span aria-hidden="true" className="absolute right-0 top-0 h-2.5 w-2.5 border-r-2 border-t-2 border-[#97C3FF]/60" />
