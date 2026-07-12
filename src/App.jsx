@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Galaxy from './components/Galaxy/Galaxy';
 import ClickSpark from './components/ClickSpark/ClickSpark';
 import HudNav from './components/HudNav/HudNav';
@@ -13,6 +13,9 @@ import Foil from './pages/Foil';
 // GitHub Pages 项目站点前缀(dev 与线上同为 /three-body-site)
 const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, '');
 
+// 站点级滚轮翻页顺序(模块之间翻页:首页⇄舰队⇄乱纪元⇄黑暗森林⇄水滴⇄二向箔)
+const ROUTE_ORDER = ['/', '/fleet', '/chaos', '/dark-forest', '/droplet', '/2d-foil'];
+
 // 路由切换回到页顶(SPA 默认保留滚动位置)
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -22,12 +25,57 @@ function ScrollToTop() {
   return null;
 }
 
+// 鼠标滚轮在模块之间翻页;若光标所在处页内还有可滚动内容(如舰队页舰长档案),
+// 先让页内滚动,滚到尽头后下一次滚轮再翻模块
+function WheelNav() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const locRef = useRef(location.pathname);
+  locRef.current = location.pathname;
+
+  useEffect(() => {
+    let lock = false;
+    const canScrollMore = (start, dy) => {
+      for (let n = start; n && n !== document.body; n = n.parentElement) {
+        if (!(n instanceof Element)) break;
+        const ov = getComputedStyle(n).overflowY;
+        // +40 阈值:route-fade 入场 translateY 会临时撑出 ~28px 假滚动区,须忽略
+        if ((ov === 'auto' || ov === 'scroll') && n.scrollHeight > n.clientHeight + 40) {
+          if (dy > 0 && n.scrollTop + n.clientHeight < n.scrollHeight - 1) return true;
+          if (dy < 0 && n.scrollTop > 1) return true;
+        }
+      }
+      return false;
+    };
+    const onWheel = e => {
+      if (e.ctrlKey) return;                       // 缩放手势放行
+      const idx = ROUTE_ORDER.indexOf(locRef.current);
+      if (idx === -1) return;
+      if (Math.abs(e.deltaY) < 20) return;
+      if (canScrollMore(e.target, e.deltaY)) return;
+      e.preventDefault();
+      if (lock) return;
+      const next = idx + (e.deltaY > 0 ? 1 : -1);
+      if (next < 0 || next >= ROUTE_ORDER.length) return;
+      lock = true;
+      navigate(ROUTE_ORDER[next]);
+      setTimeout(() => {
+        lock = false;
+      }, 1000);
+    };
+    window.addEventListener('wheel', onWheel, { passive: false });
+    return () => window.removeEventListener('wheel', onWheel);
+  }, [navigate]);
+  return null;
+}
+
 function Chrome() {
   const location = useLocation();
 
   return (
     <ClickSpark sparkColor="#FFCBB1" sparkRadius={22} sparkCount={8} duration={450}>
-      <div className="relative min-h-screen overflow-x-hidden bg-black text-white">
+      {/* overflow-hidden:根容器不产生滚动(overflow-x-hidden 会隐式把 y 变 auto,干扰滚轮翻页判定) */}
+      <div className="relative min-h-screen overflow-hidden bg-black text-white">
         {/* 深空背景(轻量星系;真·演算在 santi.html 独立页;黑暗森林页要纯黑不渲染) */}
         <div className="fixed inset-0 z-0">
           {location.pathname !== '/dark-forest' && (
@@ -50,26 +98,19 @@ function Chrome() {
         <HudNav />
 
         <main className="relative z-10">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/fleet" element={<Fleet />} />
-            <Route path="/chaos" element={<Chaos />} />
-            <Route path="/dark-forest" element={<DarkForest />} />
-            <Route path="/droplet" element={<Droplet />} />
-            <Route path="/2d-foil" element={<Foil />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          {/* 模块翻页过渡:按路径重挂并播放入场 */}
+          <div key={location.pathname} className="route-fade">
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/fleet" element={<Fleet />} />
+              <Route path="/chaos" element={<Chaos />} />
+              <Route path="/dark-forest" element={<DarkForest />} />
+              <Route path="/droplet" element={<Droplet />} />
+              <Route path="/2d-foil" element={<Foil />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
         </main>
-
-        {/* ===== 页脚(首页为单屏沉浸布局,不展示) ===== */}
-        {location.pathname !== '/' && (
-          <footer className="relative z-10 border-t border-white/10 px-6 py-10 text-center">
-            <p className="font-body text-sm text-[#ffcbb1]/60">给岁月以文明,而不是给文明以岁月。</p>
-            <p className="mt-2 font-tech text-xs tracking-[0.3em] text-white/30">
-              © 2026 THREE-BODY · SITE
-            </p>
-          </footer>
-        )}
       </div>
     </ClickSpark>
   );
@@ -79,6 +120,7 @@ export default function App() {
   return (
     <BrowserRouter basename={BASENAME}>
       <ScrollToTop />
+      <WheelNav />
       <Chrome />
     </BrowserRouter>
   );

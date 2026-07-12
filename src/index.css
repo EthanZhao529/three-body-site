@@ -95,6 +95,23 @@
   to { transform: translate(10%, 8%) rotate(8deg); }
 }
 
+/* 无色纯透明玻璃(仅折光,无底色无投影) */
+.glass-clear {
+  border: none;
+  background: transparent;
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+
+/* 站点级滚轮翻页:路由切换过渡 */
+@keyframes route-fade {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.route-fade {
+  animation: route-fade 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* 8K 星空背景:缓慢呼吸推近 */
 @keyframes bg-breathe {
   from { transform: scale(1); }
