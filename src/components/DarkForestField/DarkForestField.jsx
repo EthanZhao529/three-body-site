@@ -2,11 +2,13 @@ import { useEffect, useRef } from 'react';
 
 // 黑暗森林星野:每个亮点都是一个文明
 // 交互=悬停锁定(金色瞄准框+坐标)→点击发射光粒→命中熄灭;若干秒后新文明诞生
+// 氛围=深色星云雾团缓慢漂移+偶发流星+星点缓慢摇曳(活的森林)
 // 命中/重生判定走 setTimeout(不依赖 rAF,后台标签页也能完成),绘制走 rAF
-export default function DarkForestField({ onStrike, onSpawn, onCensus }) {
+// onCanvasReady(canvas):把内部画布交给外层(侦察透镜把它当动态纹理)
+export default function DarkForestField({ onStrike, onSpawn, onCensus, onCanvasReady }) {
   const hostRef = useRef(null);
   const cbRef = useRef({});
-  cbRef.current = { onStrike, onSpawn, onCensus };
+  cbRef.current = { onStrike, onSpawn, onCensus, onCanvasReady };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -14,6 +16,7 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus }) {
     canvas.style.cssText = 'width:100%;height:100%;display:block';
     host.appendChild(canvas);
     const ctx = canvas.getContext('2d');
+    cbRef.current.onCanvasReady?.(canvas);
 
     let W = 1;
     let H = 1;
@@ -40,6 +43,7 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus }) {
         a: rand(0.5, 0.95),
         tw: rand(0.4, 1.8),
         ph: rand(0, Math.PI * 2),
+        ph2: rand(0, Math.PI * 2),
         warm: Math.random() < 0.18,
         alive: true,
         targeted: false,
@@ -47,6 +51,9 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus }) {
         birth0: born ? performance.now() : 0
       };
     };
+    // 星点当前位置(基础位 + 缓慢摇曳)
+    const starX = (s, t) => s.fx * W + Math.sin(t * 0.25 + s.ph2) * 3.5;
+    const starY = (s, t) => s.fy * H + Math.cos(t * 0.21 + s.ph2) * 2.5;
 
     const census = () =>
       cbRef.current.onCensus?.({ alive: stars.filter(s => s.alive).length, cleansed });
@@ -69,16 +76,28 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus }) {
     );
     census();
 
+    // 星云雾团(极暗,缓慢漂移;黑暗森林要幽深不要艳丽)
+    const wisps = [
+      { fx: 0.22, fy: 0.3, rF: 0.30, rgb: '90,130,210', a: 0.055, ang: rand(0, 7), sp: 0.0022 },
+      { fx: 0.72, fy: 0.62, rF: 0.26, rgb: '120,100,200', a: 0.05, ang: rand(0, 7), sp: 0.0018 },
+      { fx: 0.5, fy: 0.82, rF: 0.22, rgb: '80,120,190', a: 0.045, ang: rand(0, 7), sp: 0.0026 },
+      { fx: 0.88, fy: 0.18, rF: 0.2, rgb: '170,120,100', a: 0.04, ang: rand(0, 7), sp: 0.002 }
+    ];
+    // 流星:偶发划过
+    let meteor = null;
+    let meteorNext = performance.now() + rand(6000, 14000);
+
     const toLocal = e => {
       const r = canvas.getBoundingClientRect();
       return { x: e.clientX - r.left, y: e.clientY - r.top };
     };
     const findStar = (x, y) => {
+      const t = performance.now() / 1000;
       let best = null;
       let bd = 20; // 命中半径 20px
       for (const s of stars) {
         if (!s.alive || s.targeted) continue;
-        const d = Math.hypot(s.fx * W - x, s.fy * H - y);
+        const d = Math.hypot(starX(s, t) - x, starY(s, t) - y);
         if (d < bd) {
           bd = d;
           best = s;
@@ -89,9 +108,10 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus }) {
 
     const impact = s => {
       if (!s.alive) return;
+      const t = performance.now() / 1000;
       s.alive = false;
       s.death0 = performance.now();
-      flashes.push({ x: s.fx * W, y: s.fy * H, t0: performance.now() });
+      flashes.push({ x: starX(s, t), y: starY(s, t), t0: performance.now() });
       cleansed += 1;
       cbRef.current.onStrike?.({ coordStr: s.coordStr, n: cleansed });
       census();
@@ -110,6 +130,7 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus }) {
       if (s.targeted) return;
       s.targeted = true;
       if (hover === s) hover = null;
+      const t = performance.now() / 1000;
       // 光粒从上/左/右随机边缘射向目标
       const side = Math.floor(rand(0, 3));
       let x0;
@@ -125,7 +146,8 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus }) {
         y0 = rand(0, H * 0.6);
       }
       const dur = 260;
-      streaks.push({ x0, y0, x1: s.fx * W, y1: s.fy * H, t0: performance.now(), dur });
+      streaks.push({ x0, y0, x1: starX(s, t), y1: starY(s, t), t0: performance.now(), dur });
+      // 命中判定用定时器(不依赖 rAF,后台标签页也能完成打击)
       const tid = setTimeout(() => {
         timers.delete(tid);
         impact(s);
@@ -155,7 +177,27 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus }) {
       ctx.clearRect(0, 0, W, H);
       const t = now / 1000;
 
-      // 文明星点(闪烁+出生淡入+熄灭淡出)
+      // 星云雾团(最底层,缓慢漂移+极缓呼吸)
+      for (const wsp of wisps) {
+        wsp.fx += Math.cos(wsp.ang) * wsp.sp / 60;
+        wsp.fy += Math.sin(wsp.ang) * wsp.sp / 60;
+        if (wsp.fx < -0.25) wsp.fx = 1.25;
+        if (wsp.fx > 1.25) wsp.fx = -0.25;
+        if (wsp.fy < -0.25) wsp.fy = 1.25;
+        if (wsp.fy > 1.25) wsp.fy = -0.25;
+        const x = wsp.fx * W, y = wsp.fy * H;
+        const r = wsp.rF * Math.min(W, H) * 1.6;
+        const a = wsp.a * (0.8 + 0.2 * Math.sin(t * 0.13 + wsp.ang));
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, `rgba(${wsp.rgb},${a.toFixed(3)})`);
+        g.addColorStop(1, `rgba(${wsp.rgb},0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, 7);
+        ctx.fill();
+      }
+
+      // 文明星点(闪烁+摇曳+出生淡入+熄灭淡出)
       for (const s of stars) {
         let alpha = s.a * (0.72 + 0.28 * Math.sin(t * s.tw + s.ph));
         if (s.birth0) alpha *= Math.min((now - s.birth0) / 1500, 1);
@@ -164,8 +206,8 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus }) {
           if (k <= 0) continue;
           alpha *= k;
         }
-        const x = s.fx * W;
-        const y = s.fy * H;
+        const x = starX(s, t);
+        const y = starY(s, t);
         const c = s.warm ? '255,190,150' : '190,215,255';
         const g = ctx.createRadialGradient(x, y, 0, x, y, s.r * 6);
         g.addColorStop(0, `rgba(${c},${(alpha * 0.5).toFixed(3)})`);
@@ -178,6 +220,43 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus }) {
         ctx.beginPath();
         ctx.arc(x, y, s.r, 0, 7);
         ctx.fill();
+      }
+
+      // 流星(偶发划过,幽蓝细痕)
+      if (!meteor && now >= meteorNext) {
+        const fromLeft = Math.random() < 0.5;
+        meteor = {
+          x0: fromLeft ? -60 : W * rand(0.3, 1),
+          y0: fromLeft ? H * rand(0, 0.5) : -60,
+          ang: fromLeft ? rand(0.15, 0.5) : rand(1.0, 1.6),
+          sp: rand(700, 1100),
+          t0: now,
+          dur: rand(1100, 1700)
+        };
+      }
+      if (meteor) {
+        const k = (now - meteor.t0) / meteor.dur;
+        if (k >= 1) {
+          meteor = null;
+          meteorNext = now + rand(9000, 22000);
+        } else {
+          const dist = meteor.sp * (now - meteor.t0) / 1000;
+          const hx = meteor.x0 + Math.cos(meteor.ang) * dist;
+          const hy = meteor.y0 + Math.sin(meteor.ang) * dist;
+          const len = 90;
+          const tx2 = hx - Math.cos(meteor.ang) * len;
+          const ty2 = hy - Math.sin(meteor.ang) * len;
+          const fade = Math.sin(Math.min(k * 2, 1) * Math.PI / 2) * (1 - k);
+          const g = ctx.createLinearGradient(tx2, ty2, hx, hy);
+          g.addColorStop(0, 'rgba(170,205,255,0)');
+          g.addColorStop(1, `rgba(210,230,255,${(0.55 * fade).toFixed(3)})`);
+          ctx.strokeStyle = g;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(tx2, ty2);
+          ctx.lineTo(hx, hy);
+          ctx.stroke();
+        }
       }
 
       // 光粒(打击流,金色)
@@ -226,8 +305,8 @@ export default function DarkForestField({ onStrike, onSpawn, onCensus }) {
 
       // 悬停锁定:金色瞄准框+坐标读数
       if (hover && hover.alive && !hover.targeted) {
-        const x = hover.fx * W;
-        const y = hover.fy * H;
+        const x = starX(hover, t);
+        const y = starY(hover, t);
         const d = 11;
         const l = 5;
         ctx.strokeStyle = 'rgba(255,162,106,0.9)';
