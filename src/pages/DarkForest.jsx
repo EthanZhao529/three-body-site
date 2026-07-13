@@ -13,11 +13,8 @@ const CIVS = [
   { id: 'ring', title: '魔戒', en: 'THE RING', coord: '[ 39.5, 0.00, 0.00 ]', stage: '高维观测者', tech: 'K-2.05', threat: ['高', '#ffa26a'], desc: '潜伏在冥王星轨道外的四维碎块残留文明。以冷漠的目光旁观低维世界的挣扎,偶尔留下无法理解的讯息。' },
   { id: 'silicon', title: '硅基集群', en: 'SILICON HIVE', coord: '[ -7.71, 2.08, 0.44 ]', stage: '机械文明', tech: 'K-1.10', threat: ['中', '#e8c66a'], desc: '抛弃血肉、以晶体计算矩阵为躯壳的机械集群。在红矮星旁筑起金属巢穴,以纳秒为思考的单位。' },
   { id: 'dyson', title: '戴森建造者', en: 'DYSON BUILDERS', coord: '[ 11.28, -0.02, 3.05 ]', stage: '能量文明', tech: 'K-1.63', threat: ['高', '#ffa26a'], desc: '用巨构包裹母星恒星、汲取每一缕光子的贪婪建造者。它们的天空里没有星辰,只有自己造物的阴影。' },
-  { id: 'neutron', title: '中子星牧者', en: 'NEUTRON SHEPHERDS', coord: '[ 210.5, -3.16, 8.44 ]', stage: '简并态生命', tech: 'K-2.24', threat: ['高', '#ffa26a'], desc: '栖居于中子星表面的超致密文明,以磁场低语交流。一个念头跨越千年,寿命以亿年计,视人类如朝生暮死的微尘。' },
-  { id: 'nomad', title: '曲率游牧', en: 'CURVATURE NOMADS', coord: '[ 移动中 ]', stage: '流浪舰队', tech: 'K-1.80', threat: ['中', '#e8c66a'], desc: '焚毁母星、乘曲率飞船永恒流浪的难民文明。不留航迹,不发信号,像黑暗森林里最警觉的猎人,沉默地掠过每一片星域。' },
   { id: 'blackdomain', title: '黑域隐者', en: 'BLACK DOMAIN', coord: '[ -1.06, 2.57, 7.25 ]', stage: '自囚文明', tech: 'K-1.55', threat: ['低', '#8fd9a8'], desc: '把家园周围的光速降到第三宇宙速度以下、将自己封进黑域的安全声明者。自愿放弃星辰大海,只为向宇宙宣告:我无害。' },
   { id: 'gasgiant', title: '风暴浮民', en: 'STORM DWELLERS', coord: '[ 0.93, 4.22, -1.37 ]', stage: '气态生命', tech: 'K-0.94', threat: ['低', '#8fd9a8'], desc: '漂浮于木星型行星风暴层的浮空生命。以电离层为神经,以飓风为诗篇,从不曾仰望自己厚厚云层之上的星空。' },
-  { id: 'lightgrave', title: '光墓', en: 'THE LIGHT TOMB', coord: '[ 8.26, -0.47, -7.63 ]', stage: '文明遗迹', tech: 'K-2.60', threat: ['已逝', '#8a93a8'], desc: '一个被二向箔降维的文明遗骸。如今是一幅永远静止的二维画卷,以光速的速度飘向深空——它曾经也是猎人。' },
   { id: 'mirror', title: '镜面心智', en: 'MIRROR MINDS', coord: '[ 1.50, -0.25, 6.00 ]', stage: '拟态文明', tech: 'K-1.31', threat: ['中', '#e8c66a'], desc: '从不主动暴露自身,只反射邻居的信号。让每一个窥探它的文明,都以为自己看见了另一个自己——完美的黑暗森林伪装。' },
   { id: 'sowers', title: '播种者', en: 'THE SOWERS', coord: '[ 古老 ]', stage: '远古文明', tech: 'K-1.72', threat: ['未知', '#c39eff'], desc: '早已消亡的古老文明,却在银河各处播撒下休眠的生命种子。或许你我,都只是它某次实验里,一粒偶然发芽的孢子。' },
   { id: 'watcher', title: '瞭望者', en: 'THE WATCHER', coord: '[ -11.04, 4.84, 7.53 ]', stage: '监听文明', tech: 'K-1.20', threat: ['低', '#8fd9a8'], desc: '只听,不说。在冰冷的星际尘埃中架起无尽的天线,记录每一个文明诞生与熄灭的电波,自己却从不发出一个音节。' }
