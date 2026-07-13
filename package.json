@@ -12,6 +12,7 @@
     "@gsap/react": "^2.1.2",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
+    "gl-matrix": "^3.4.4",
     "gsap": "^3.13.0",
     "maath": "^0.10.8",
     "motion": "^12.23.12",
