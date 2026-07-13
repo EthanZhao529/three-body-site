@@ -28,9 +28,9 @@ const STATES = {
   }
 };
 
-// 上层 X-ray 遮罩:鼠标处挖圆洞(透明)露下层,外围不透明显示上层
+// 上层 X-ray 遮罩:鼠标处挖大圆洞(透明)露下层,外围不透明显示上层(范围加大,柔和过渡)
 const XRAY_MASK =
-  'radial-gradient(circle at var(--mx) var(--my), transparent 0px, transparent 96px, rgba(0,0,0,0.4) 128px, black 168px)';
+  'radial-gradient(circle at var(--mx) var(--my), transparent 0px, transparent 200px, rgba(0,0,0,0.35) 300px, black 400px)';
 
 export default function Chaos() {
   const layerRef = useRef(null);
@@ -45,8 +45,6 @@ export default function Chaos() {
     const r = el.getBoundingClientRect();
     el.style.setProperty('--mx', `${e.clientX - r.left}px`);
     el.style.setProperty('--my', `${e.clientY - r.top}px`);
-    el.style.setProperty('--rx', `${e.clientX - r.left}px`);
-    el.style.setProperty('--ry', `${e.clientY - r.top}px`);
   };
   const toggle = () => setTopId(id => (id === 'sunfire' ? 'starflight' : 'sunfire'));
 
@@ -68,7 +66,7 @@ export default function Chaos() {
       <div
         ref={layerRef}
         className="absolute inset-0"
-        style={{ '--mx': '-999px', '--my': '-999px', '--rx': '-999px', '--ry': '-999px' }}
+        style={{ '--mx': '-999px', '--my': '-999px' }}
       >
         <img
           src={`${BASE}assets/chaos/${top.img}`}
@@ -76,17 +74,6 @@ export default function Chaos() {
           aria-hidden="true"
           className="chaos-pulse absolute inset-0 h-full w-full object-cover"
           style={{ maskImage: XRAY_MASK, WebkitMaskImage: XRAY_MASK }}
-        />
-        {/* 透视镜发光圈(跟随鼠标) */}
-        <div
-          className="pointer-events-none absolute h-[192px] w-[192px] rounded-full"
-          style={{
-            left: 'var(--rx)',
-            top: 'var(--ry)',
-            transform: 'translate(-50%, -50%)',
-            border: `1px solid ${bottom.accent}88`,
-            boxShadow: `0 0 24px ${bottom.accent}55, inset 0 0 24px ${bottom.accent}33`
-          }}
         />
       </div>
 
