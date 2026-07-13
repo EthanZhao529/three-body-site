@@ -139,6 +139,15 @@
   top: -6px;
 }
 
+/* 乱纪元:上层图恒星能量的缓慢明灭(不改几何,不干扰 X-ray) */
+@keyframes chaos-pulse {
+  0%, 100% { filter: brightness(1) contrast(1); }
+  50% { filter: brightness(1.09) contrast(1.04); }
+}
+.chaos-pulse {
+  animation: chaos-pulse 7s ease-in-out infinite;
+}
+
 /* 8K 星空背景:缓慢呼吸推近 */
 @keyframes bg-breathe {
   from { transform: scale(1); }

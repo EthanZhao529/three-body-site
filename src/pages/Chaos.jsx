@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import ChaosParticles from '../components/ChaosParticles/ChaosParticles';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -73,7 +74,7 @@ export default function Chaos() {
           src={`${BASE}assets/chaos/${top.img}`}
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover"
+          className="chaos-pulse absolute inset-0 h-full w-full object-cover"
           style={{ maskImage: XRAY_MASK, WebkitMaskImage: XRAY_MASK }}
         />
         {/* 透视镜发光圈(跟随鼠标) */}
@@ -89,7 +90,12 @@ export default function Chaos() {
         />
       </div>
 
-      <div className="absolute inset-0 bg-black/15" aria-hidden="true" />
+      {/* 氛围粒子:三日凌空飘升余烬 / 三飞星飘落寒雪(随上层态切换) */}
+      <div className="pointer-events-none absolute inset-0 z-[6]">
+        <ChaosParticles mode={topId === 'sunfire' ? 'fire' : 'frost'} />
+      </div>
+
+      <div className="pointer-events-none absolute inset-0 bg-black/15" aria-hidden="true" />
 
       {/* 顶部标题 */}
       <div className="pointer-events-none absolute inset-x-0 top-20 z-10 flex flex-col items-center px-6 text-center [transform:translateZ(0)]">
