@@ -24,7 +24,7 @@ const CFG = {
   cursorRotation: true,    // 光标控制旋转
   rx: 50, ry: 6,           // 关闭光标旋转时的固定偏航/俯仰(度)
   hdr: 0.3,                // HDR 亮度(泛光强度滑条)
-  doppler: 0.025,          // 多普勒效应(0~0.05)
+  doppler: 0.012,          // 多普勒效应(2026-07-13:0.025→0.012,减弱蓝红罩的蓝)
   audioflashing: true,     // 音频闪烁(godrays+亮度脉动)
   rgb: false,              // RGB 效果
   rgbLow: [0.0824, 0, 1], rgbHigh: [1, 0, 0],
@@ -36,15 +36,15 @@ const CFG = {
 };
 /* WE↔three 量纲标定(唯一允许手调的旋钮,逐项对照桌面壁纸) */
 const CAL = {
-  bloom: 4.0,        // WE bloomhdrstrength=0.3 → UnrealBloom strength = 0.3×此值
+  bloom: 2.0,        // WE bloomhdrstrength=0.3 → UnrealBloom strength = 0.3×此值(2026-07-13 收敛过曝白团)
   yawSign: -1,       // WE 偏航方向 ↔ three.js 旋向(左右手系差异)
   light: 2.2,       // WE 平行光 9.84/8.95 ×brightness4 → three 标定
-  env: 4.6,          // 反射强度(2026-07-13 去塑料:调亮镜面反射,让星流清晰倒映)
+  env: 2.0,          // 反射强度(2026-07-13 二次:4.6 过曝→2.0,水滴回暗镜面不炸 bloom)
   rough: 0.08,       // 镜面锐化(0.45 磨砂→0.08 近纯镜面,根治塑料感;512 探针+mip 不露块)
   lookAtY: 0.05,     // 运行时相机注视点(scene.json camera.center 是编辑器残值,同 santi 教训;
                      // 依据=preview 里时钟与水滴同轴居中、水滴略低于中心)
-  tunnel: 1.2,       // 圆柱材质 Color0.8×Brigtness1.5(解码值)
-  cubeBoost: 12.0,   // 反射探针里的隧道壁增亮(等效原版屏幕空间反射沿轴积分的亮度)
+  tunnel: 0.66,      // 圆柱材质亮度(2026-07-13:1.2→0.66,背景星流更黑暗深邃)
+  cubeBoost: 6.0,    // 反射探针里的隧道壁增亮(2026-07-13:12→6,镜面反射不过曝)
   cursorPx: 1.0,     // 光标像素→WE cursorWorldPosition 比例
   text: 1.0,         // 文字尺寸整体缩放
 };
@@ -238,7 +238,7 @@ class GodraysPass extends Pass {
     this.rtA = new THREE.WebGLRenderTarget(1, 1, opt);
     this.rtB = new THREE.WebGLRenderTarget(1, 1, opt);
     this.uTime = { value: 0 };
-    this.uColor = { value: new THREE.Color(0, 0.0157, 1) };  // 静音=纯蓝(minColor)
+    this.uColor = { value: new THREE.Color(0.52, 0.5, 0.47) };  // 静音默认改中性微暖淡(2026-07-13:原纯蓝致背景发蓝+白团,去蓝)
     /* pass1: 半分辨率降采样+阈值+云噪声(downsample2.frag 原式) */
     this.mDown = new THREE.ShaderMaterial({
       uniforms: {
@@ -265,7 +265,7 @@ class GodraysPass extends Pass {
       fragmentShader: `
         varying vec2 vUv; uniform sampler2D tD; uniform vec3 uColor; uniform vec2 uCenter;
         void main(){
-          const float LEN=0.04, INT=0.26, SINT=0.06;   // rayintensity 0.26,50步强度=0.1×30/50
+          const float LEN=0.04, INT=0.10, SINT=0.06;   // rayintensity(2026-07-13:0.26→0.10,收敛刺眼白团)
           vec2 dir=uCenter-vUv; float dist=length(dir); dir/=max(dist,1e-6);
           dist*=LEN; vec2 tc=vUv+dir*dist; vec2 st=dir*dist/49.0;
           vec4 acc=vec4(0.);
