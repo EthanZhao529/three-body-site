@@ -350,7 +350,9 @@ class GradePass extends Pass {
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const godraysPass = new GodraysPass();
-composer.addPass(godraysPass);
+// 2026-07-13:方块炫光根治——godrays(音频体积光)彻底移除。静音时它只是从水滴高光爆出的
+// 半分辨率方块伪影,无音乐时纯属多余;不 addPass 即可(对象保留供 frame 更新 uTime 不报错)
+// composer.addPass(godraysPass);
 const gradePass = new GradePass();
 composer.addPass(gradePass);
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), CFG.hdr * CAL.bloom, 0.9, 2.2);  // 阈值 1.0→2.2(2026-07-13:反射消失点不再炸白团)
