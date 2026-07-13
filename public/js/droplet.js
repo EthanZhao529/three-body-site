@@ -44,7 +44,7 @@ const CAL = {
   lookAtY: 0.05,     // 运行时相机注视点(scene.json camera.center 是编辑器残值,同 santi 教训;
                      // 依据=preview 里时钟与水滴同轴居中、水滴略低于中心)
   tunnel: 0.66,      // 圆柱材质亮度(2026-07-13:1.2→0.66,背景星流更黑暗深邃)
-  cubeBoost: 6.0,    // 反射探针里的隧道壁增亮(2026-07-13:12→6,镜面反射不过曝)
+  cubeBoost: 4.0,    // 反射探针里的隧道壁增亮(2026-07-13 二次:6→4,反射消失点不再过亮触发泛光)
   cursorPx: 1.0,     // 光标像素→WE cursorWorldPosition 比例
   text: 1.0,         // 文字尺寸整体缩放
 };
@@ -265,7 +265,7 @@ class GodraysPass extends Pass {
       fragmentShader: `
         varying vec2 vUv; uniform sampler2D tD; uniform vec3 uColor; uniform vec2 uCenter;
         void main(){
-          const float LEN=0.04, INT=0.10, SINT=0.06;   // rayintensity(2026-07-13:0.26→0.10,收敛刺眼白团)
+          const float LEN=0.04, INT=0.05, SINT=0.06;   // rayintensity(2026-07-13 二次:0.10→0.05,进一步收敛)
           vec2 dir=uCenter-vUv; float dist=length(dir); dir/=max(dist,1e-6);
           dist*=LEN; vec2 tc=vUv+dir*dist; vec2 st=dir*dist/49.0;
           vec4 acc=vec4(0.);
@@ -303,9 +303,10 @@ class GodraysPass extends Pass {
     this.quad = new FullScreenQuad(this.mDown);
   }
   setSize(w, h) {
-    this.rtA.setSize(w >> 1, h >> 1);
-    this.rtB.setSize(w >> 1, h >> 1);
-    this.mBlur.uniforms.uRes.value.set(w >> 1, h >> 1);
+    // 2026-07-13:半分辨率(w>>1)导致 godrays 亮点降采样成方块伪影→改全分辨率消除方形炫光
+    this.rtA.setSize(w, h);
+    this.rtB.setSize(w, h);
+    this.mBlur.uniforms.uRes.value.set(w, h);
   }
   render(renderer, writeBuffer, readBuffer) {
     const run = (mat, rt) => { this.quad.material = mat; renderer.setRenderTarget(rt); this.quad.render(renderer); };
@@ -352,7 +353,7 @@ const godraysPass = new GodraysPass();
 composer.addPass(godraysPass);
 const gradePass = new GradePass();
 composer.addPass(gradePass);
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), CFG.hdr * CAL.bloom, 1.0, 1.0);  // 阈值=WE原值1.0(HDR域)
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), CFG.hdr * CAL.bloom, 0.9, 2.2);  // 阈值 1.0→2.2(2026-07-13:反射消失点不再炸白团)
 composer.addPass(bloomPass);   // WE:scene HDR 泛光最后作用(效果层吃泛光前画面)
 
 /* ==================== 音频(16 段频谱,WE 公式原样) ==================== */
