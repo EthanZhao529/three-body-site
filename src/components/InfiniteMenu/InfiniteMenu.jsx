@@ -55,6 +55,7 @@ precision highp float;
 uniform sampler2D uTex;
 uniform int uItemCount;
 uniform int uAtlasSize;
+uniform float uFrames;
 
 out vec4 outColor;
 
@@ -74,17 +75,24 @@ void main() {
     float imageAspect = float(texSize.x) / float(texSize.y);
     float containerAspect = 1.0;
 
+    // 轻微动效(灵动,不明显):每盘错落相位的缓慢缩放呼吸 + 微漂移
+    float ph = float(vInstanceId) * 1.7;
+    float zoom = 1.0 + 0.018 * sin(uFrames * 0.02 + ph);
+    vec2 drift = vec2(sin(uFrames * 0.016 + ph), cos(uFrames * 0.013 + ph)) * 0.006;
+
     float scale = max(imageAspect / containerAspect,
-                     containerAspect / imageAspect);
+                     containerAspect / imageAspect) * zoom;
 
     vec2 st = vec2(vUvs.x, 1.0 - vUvs.y);
-    st = (st - 0.5) * scale + 0.5;
+    st = (st - 0.5) * scale + 0.5 + drift;
 
     st = clamp(st, 0.0, 1.0);
 
     st = st * cellSize + cellOffset;
 
     outColor = texture(uTex, st);
+    // 亮度呼吸(±7%,轻微)
+    outColor.rgb *= 0.93 + 0.07 * sin(uFrames * 0.03 + ph);
     outColor.a *= vAlpha;
 }
 `;

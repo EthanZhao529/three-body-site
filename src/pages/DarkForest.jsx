@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import InfiniteMenu from '../components/InfiniteMenu/InfiniteMenu';
 
 const BASE = import.meta.env.BASE_URL;
@@ -26,8 +26,12 @@ const CIVS = [
 // 威胁颜色映射 → 卡片强调色边缘光
 export default function DarkForest() {
   const bgRef = useRef(null);
-  const items = CIVS.map(c => ({ image: `${BASE}assets/civs/${c.id}.webp`, link: '', title: c.title, description: c.desc, meta: c }));
-  const [active, setActive] = useState(items[0].meta);
+  // items 引用必须稳定:否则 setActive 重渲染会让 InfiniteMenu 的 [items] effect 重跑→球体重建复位到第一张
+  const items = useMemo(
+    () => CIVS.map(c => ({ image: `${BASE}assets/civs/${c.id}.webp`, link: '', title: c.title, description: c.desc, meta: c })),
+    []
+  );
+  const [active, setActive] = useState(CIVS[0]);
 
   const onMove = e => {
     const el = bgRef.current;
@@ -59,7 +63,7 @@ export default function DarkForest() {
       <div className="absolute inset-0">
         <InfiniteMenu
           items={items}
-          scale={2.2}
+          scale={2.9}
           showOverlay={false}
           onActiveChange={it => it?.meta && setActive(it.meta)}
         />
