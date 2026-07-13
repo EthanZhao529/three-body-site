@@ -36,9 +36,9 @@ const STATES = {
   }
 };
 
-// 上层 X-ray 遮罩:鼠标处挖大圆洞(透明)露下层。范围较旧版放大一倍(洞半径 200→400px)。
+// 上层 X-ray 遮罩:鼠标处挖大圆洞(透明)露下层。洞半径 340px(在放大一倍的基础上按用户要求缩小 15%)。
 const XRAY_MASK =
-  'radial-gradient(circle at var(--mx) var(--my), transparent 0px, transparent 400px, rgba(0,0,0,0.35) 600px, black 800px)';
+  'radial-gradient(circle at var(--mx) var(--my), transparent 0px, transparent 340px, rgba(0,0,0,0.35) 510px, black 680px)';
 
 export default function Chaos() {
   const layerRef = useRef(null);
