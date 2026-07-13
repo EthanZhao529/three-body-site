@@ -142,6 +142,16 @@
   var menu = document.getElementById('snMenu');
   document.getElementById('snBurger').addEventListener('click', function () { menu.hidden = false; });
   document.getElementById('snClose').addEventListener('click', function () { menu.hidden = true; });
+
+  /* 滚轮翻页:演算页逻辑上位于 水滴 ↔ 二向箔 之间(独立全屏页,靠 404 fallback 进 SPA 路由) */
+  var pageLock = false, accum = 0;
+  addEventListener('wheel', function (e) {
+    if (pageLock) return;
+    accum += e.deltaY;
+    if (Math.abs(accum) < 90) return;          // 累积阈值,防误触(演算靠拖拽,滚轮才翻页)
+    pageLock = true;
+    location.href = accum > 0 ? '2d-foil' : 'droplet';
+  }, { passive: true });
 })();
 </script>
 

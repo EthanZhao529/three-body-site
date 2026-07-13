@@ -243,8 +243,12 @@
   z-index: 4;
 }
 
+/* 站点定制:关闭全息炫光/眩光层,保留照片原色,只留 3D 倾斜(用户要求) */
+.pc-shine,
+.pc-glare {
+  display: none !important;
+}
 .pc-avatar-content {
-  mix-blend-mode: luminosity;
   overflow: visible;
   transform: translateZ(2);
   backface-visibility: hidden;

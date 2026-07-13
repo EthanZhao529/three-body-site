@@ -39,12 +39,12 @@ const CAL = {
   bloom: 4.0,        // WE bloomhdrstrength=0.3 → UnrealBloom strength = 0.3×此值
   yawSign: -1,       // WE 偏航方向 ↔ three.js 旋向(左右手系差异)
   light: 2.2,       // WE 平行光 9.84/8.95 ×brightness4 → three 标定
-  env: 3.0,          // 反射强度 = 1.2×材质brightness4(解码值,漏用会没有炽白边缘)
-  rough: 0.45,       // WE roughness=0.6 与 three PMREM 量纲不同,按 preview 对照收紧
+  env: 4.6,          // 反射强度(2026-07-13 去塑料:调亮镜面反射,让星流清晰倒映)
+  rough: 0.08,       // 镜面锐化(0.45 磨砂→0.08 近纯镜面,根治塑料感;512 探针+mip 不露块)
   lookAtY: 0.05,     // 运行时相机注视点(scene.json camera.center 是编辑器残值,同 santi 教训;
                      // 依据=preview 里时钟与水滴同轴居中、水滴略低于中心)
   tunnel: 1.2,       // 圆柱材质 Color0.8×Brigtness1.5(解码值)
-  cubeBoost: 8.0,    // 反射探针里的隧道壁增亮(等效原版屏幕空间反射沿轴积分的亮度)
+  cubeBoost: 12.0,   // 反射探针里的隧道壁增亮(等效原版屏幕空间反射沿轴积分的亮度)
   cursorPx: 1.0,     // 光标像素→WE cursorWorldPosition 比例
   text: 1.0,         // 文字尺寸整体缩放
 };
@@ -151,7 +151,7 @@ loadBin('assets/droplet/uc.bin').then(buf => {
 });
 
 /* ==================== 水滴(sd) ==================== */
-const cubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
+const cubeRT = new THREE.WebGLCubeRenderTarget(512, { type: THREE.HalfFloatType, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
 const cubeCam = new THREE.CubeCamera(0.01, 5000, cubeRT);
 scene.add(cubeCam);
 

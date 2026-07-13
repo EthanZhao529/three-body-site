@@ -94,6 +94,20 @@ function Chrome() {
     prevRef.current = location.pathname;
   }
 
+  // 空闲预取黑暗森林 8K 背景(已压至 ~210KB),进页前即缓存,消除首次加载等待
+  useEffect(() => {
+    const preload = () => {
+      const img = new Image();
+      img.src = `${import.meta.env.BASE_URL}assets/wp/sky8k.webp`;
+    };
+    if ('requestIdleCallback' in window) {
+      const id = requestIdleCallback(preload, { timeout: 3000 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = setTimeout(preload, 1500);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <ClickSpark sparkColor="#FFCBB1" sparkRadius={22} sparkCount={8} duration={450}>
       {/* overflow-hidden:根容器不产生滚动(overflow-x-hidden 会隐式把 y 变 auto,干扰滚轮翻页判定) */}
