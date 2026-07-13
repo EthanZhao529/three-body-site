@@ -1,11 +1,27 @@
-// 二向箔 · 降维打击 —— 播放真实生成的降维大片(Seedance 出素材,剪映精修)。
-// 视频 public/foil.mp4 全屏循环播放,叠简约 HUD(标题 + 引文),保持站点调性。
+import { useEffect, useRef } from 'react';
+import HilbertReduce from '../components/HilbertReduce/HilbertReduce';
+
+// 二向箔页:全屏播放真实降维大片 + 左上信息框(介绍二向箔) + 右下演示框(希尔伯特曲线降维动画,自动循环)。
 const BASE = import.meta.env.BASE_URL;
 
 export default function Foil() {
+  const apiRef = useRef(null);
+
+  // 右下演示:自动循环希尔伯特降维(3D体素 → 二维铺开 → 复原 → 再降维)
+  useEffect(() => {
+    let state = 'space';
+    const t = setInterval(() => {
+      const api = apiRef.current;
+      if (!api) return;
+      if (state === 'space') { api.collapse(); state = 'plane'; }
+      else { api.restore(); state = 'space'; }
+    }, 5500);
+    return () => clearInterval(t);
+  }, []);
+
   return (
     <section className="relative h-dvh select-none overflow-hidden bg-black">
-      {/* 降维大片:全屏循环、静音自动播放(浏览器要求 muted 才自动播) */}
+      {/* 降维大片:全屏循环、静音自动播放 */}
       <video
         src={`${BASE}foil.mp4`}
         autoPlay
@@ -24,13 +40,38 @@ export default function Foil() {
         </h1>
       </div>
 
-      {/* 底部引文 */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-8 z-10 px-8 text-center">
-        <p className="font-santi text-lg text-[#FFCBB1] md:text-xl [text-shadow:0_0_16px_rgba(255,163,90,0.4)]">
-          毁灭你,与你何干。
-        </p>
-        <p className="mt-2 font-body text-sm leading-relaxed text-[#C6CDDB]/55">
-          给岁月以文明,而不是给文明以岁月 —— 太阳系的一切,都凝在了这幅降维的画里。
+      {/* 左上:二向箔信息框 */}
+      <div
+        className="liquid-glass absolute left-5 top-40 z-10 w-[min(340px,80vw)] rounded-2xl px-5 py-4 md:left-8 md:top-44"
+        style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,.16), 0 0 30px rgba(151,195,255,.2)' }}
+      >
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#97c3ff]" />
+          <span className="font-tech text-[10px] tracking-[0.3em] text-[#97c3ff]">WEAPON · 降维武器</span>
+        </div>
+        <h2 className="mt-1.5 font-santi text-2xl text-white">二向箔</h2>
+        <div className="mt-3 space-y-2 border-t border-white/10 pt-2.5 font-body text-xs leading-relaxed text-[#c6d6ef]">
+          <p><span className="text-white/40">来源 </span>高等文明「歌者」随手投出的降维武器,形如一张不比信用卡大的白色薄膜。</p>
+          <p><span className="text-white/40">原理 </span>展开后将周围三维空间以光速坍缩为二维,所过之处万物被拍平,无法逃脱——除非逃逸速度达到光速。</p>
+          <p><span className="text-white/40">结局 </span>整个太阳系连同其中一切,被压成一幅悬在黑暗中、绚烂而永恒的二维画卷。</p>
+        </div>
+        <p className="mt-3 font-body text-xs italic text-[#9db0cc]">「毁灭你,与你何干。」</p>
+      </div>
+
+      {/* 右下:降维原理演示(希尔伯特曲线降维,自动循环) */}
+      <div
+        className="liquid-glass absolute bottom-6 right-5 z-10 w-[min(340px,82vw)] overflow-hidden rounded-2xl md:right-8"
+        style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,.16), 0 0 30px rgba(255,163,90,.18)' }}
+      >
+        <div className="flex items-center gap-2 px-4 pt-3">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FFA26A]" />
+          <span className="font-tech text-[10px] tracking-[0.3em] text-[#FFCBB1]">PRINCIPLE · 降维原理演示</span>
+        </div>
+        <div className="relative mt-2 h-[190px] w-full">
+          <HilbertReduce onReady={api => { apiRef.current = api; }} />
+        </div>
+        <p className="px-4 pb-3 pt-1 font-body text-[11px] leading-snug text-[#c6d6ef]/80">
+          三维物体沿希尔伯特曲线被逐块抽出,在二维平面按同一曲线重新铺开——降维后信息不丢,只是失去了一个维度。
         </p>
       </div>
     </section>

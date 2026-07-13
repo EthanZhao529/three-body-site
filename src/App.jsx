@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 import Galaxy from './components/Galaxy/Galaxy';
 import ClickSpark from './components/ClickSpark/ClickSpark';
 import HudNav from './components/HudNav/HudNav';
-import SplashCursor from './components/SplashCursor/SplashCursor';
 import Home from './pages/Home';
 import Fleet from './pages/Fleet';
 import Chaos from './pages/Chaos';
@@ -133,7 +132,6 @@ function Chrome() {
 
         {/* 顶部导航:舰桥 HUD(全站含首页) */}
         <HudNav />
-        <SplashCursor DENSITY_DISSIPATION={3.5} VELOCITY_DISSIPATION={2} PRESSURE={0.1} CURL={3} SPLAT_RADIUS={0.2} SPLAT_FORCE={6000} COLOR_UPDATE_SPEED={10} SHADING RAINBOW_MODE={false} COLOR="#A855F7" />
 
         <main className="relative z-10">
           {/* 模块翻页过渡:按路径重挂,弹性入场(带方向) */}
