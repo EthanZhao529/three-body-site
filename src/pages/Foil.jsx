@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import FoilCollapse from '../components/FoilCollapse/FoilCollapse';
+import HilbertReduce from '../components/HilbertReduce/HilbertReduce';
 
 // 二向箔 · 降维打击。三维太阳系 → 点击投放二向箔 → 整个太阳系被拍平成一幅二维之画。
 // Canvas 负责演算与画面(FoilCollapse),本页只叠 HUD(舰桥式信息卡),三态由 onPhase 驱动。
@@ -7,9 +7,9 @@ const INFO = {
   space: {
     tag: 'THREE-DIMENSIONAL',
     accent: '#97c3ff',
-    era: '三维宇宙',
+    era: '三维 · 地球',
     dim: '3',
-    state: '太阳系 · 正常时空',
+    state: '人类的家园,悬于三维空间',
     line: '一片薄膜,一个碎块 —— 它叫二向箔。',
   },
   collapsing: {
@@ -17,15 +17,15 @@ const INFO = {
     accent: '#FFA26A',
     era: '降维进行中',
     dim: '3 → 2',
-    state: '空间正在跌落,深度归于虚无',
+    state: '沿希尔伯特曲线,逐块跌落二维',
     line: '跌落是从一个方向开始的,谁也躲不开。',
   },
   plane: {
     tag: 'TWO-DIMENSIONAL',
     accent: '#FFCBB1',
-    era: '二维宇宙',
+    era: '二维 · 展开的地球',
     dim: '2',
-    state: '太阳系已成为一幅画',
+    state: '家园被展开成一幅平面的画',
     line: '毁灭你,与你何干。',
   },
 };
@@ -42,7 +42,7 @@ export default function Foil() {
     >
       {/* 演算画布 */}
       <div className="absolute inset-0 z-0">
-        <FoilCollapse onPhase={setPhase} onReady={api => { apiRef.current = api; }} />
+        <HilbertReduce onPhase={setPhase} onReady={api => { apiRef.current = api; }} />
       </div>
 
       {/* 顶部标题 */}
@@ -103,8 +103,8 @@ export default function Foil() {
       {/* 底部引文 */}
       <p className="pointer-events-none absolute inset-x-0 bottom-6 z-0 hidden select-none px-8 text-center font-body text-sm text-[#C6CDDB]/45 md:block">
         {phase === 'plane'
-          ? '给岁月以文明,而不是给文明以岁月 —— 太阳系的一切,都留在了这幅永恒的二维画卷里。'
-          : '歌者随手将一片二向箔掷向太阳系,三维的一切开始向二维跌落。'}
+          ? '给岁月以文明,而不是给文明以岁月 —— 家园的一切,都留在了这幅展开的二维画里。'
+          : '歌者随手掷来一片二向箔 —— 三维的地球,将沿一条曲线被逐块抽向二维。'}
       </p>
     </section>
   );
