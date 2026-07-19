@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>水滴 | Droplet · Three-Body</title>
 <meta name="description" content="Wallpaper Engine「水滴 三体 | Droplet」壁纸(作者 SYKM)的浏览器复刻:光速星流隧道 + 纯镜面水滴探测器。" />
-<link rel="stylesheet" href="css/droplet.css" />
+<link rel="stylesheet" href="css/droplet.css?v=8" />
 </head>
 <body>
 
@@ -48,6 +48,7 @@ addEventListener('wheel', function (e) {
 <script type="importmap">
 { "imports": { "three": "./js/vendor/three.module.js" } }
 </script>
-<script type="module" src="js/droplet.js"></script>
+<!-- ?v=8 缓存击穿:浏览器对 iframe 子资源的强缓存会让旧版 js(带时钟/公式/godrays方块)阴魂不散 -->
+<script type="module" src="js/droplet.js?v=8"></script>
 </body>
 </html>

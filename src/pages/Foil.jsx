@@ -4,6 +4,7 @@ import HilbertReduce from '../components/HilbertReduce/HilbertReduce';
 // 二向箔页:全屏播放真实降维大片 + 左上信息框(介绍二向箔) + 右下演示框(希尔伯特曲线降维动画,自动循环)。
 // ⚠️定位与玻璃分层:外层 div 负责 absolute 定位,内层才用 liquid-glass;
 //   因为 .liquid-glass{position:relative} 会覆盖 Tailwind 的 absolute(index.css 在其后加载)。
+// ?v=2:2026-07-19 修正版视频(抹除第4段多余地球+提前转场+H264 1080p60 通用兼容),防旧缓存
 const BASE = import.meta.env.BASE_URL;
 
 export default function Foil() {
@@ -25,7 +26,7 @@ export default function Foil() {
     <section className="relative h-dvh select-none overflow-hidden bg-black">
       {/* 降维大片:全屏循环、静音自动播放 */}
       <video
-        src={`${BASE}foil.mp4`}
+        src={`${BASE}foil.mp4?v=2`}
         autoPlay
         loop
         muted

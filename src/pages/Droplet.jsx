@@ -5,6 +5,7 @@ const LIGHT = 299792.458; // km/s
 
 // 水滴:壁纸复刻页实装(droplet.html)。iframe 保留指针交互(光标旋转/BGM/滚轮翻页);
 // 覆盖层:左上介绍框 + 实时遥测(速度/坐标,模拟水滴向舰队逼近)
+// ?v=8:iframe 子资源缓存击穿(旧版 js 带时钟/公式/godrays 方块光效,普通强刷刷不掉)
 export default function Droplet() {
   const [tele, setTele] = useState({ kms: 4530, c: 0.0151, x: 0.31, y: -0.12, z: 61.4 });
 
@@ -30,7 +31,7 @@ export default function Droplet() {
   return (
     <section className="relative h-dvh overflow-hidden bg-black">
       <iframe
-        src={`${BASE}droplet.html`}
+        src={`${BASE}droplet.html?v=8`}
         title="水滴 · Droplet"
         className="absolute inset-0 h-full w-full border-0"
       />

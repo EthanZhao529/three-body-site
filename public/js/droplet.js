@@ -36,15 +36,15 @@ const CFG = {
 };
 /* WE↔three 量纲标定(唯一允许手调的旋钮,逐项对照桌面壁纸) */
 const CAL = {
-  bloom: 2.0,        // WE bloomhdrstrength=0.3 → UnrealBloom strength = 0.3×此值(2026-07-13 收敛过曝白团)
+  bloom: 1.2,        // WE bloomhdrstrength=0.3 → UnrealBloom strength = 0.3×此值(2026-07-19:2.0 高光炸成方块 mip 白团→1.2)
   yawSign: -1,       // WE 偏航方向 ↔ three.js 旋向(左右手系差异)
   light: 2.2,       // WE 平行光 9.84/8.95 ×brightness4 → three 标定
-  env: 2.0,          // 反射强度(2026-07-13 二次:4.6 过曝→2.0,水滴回暗镜面不炸 bloom)
+  env: 4.2,          // 反射强度(2026-07-19 三轮:3.2→4.2,水滴镜面本体反射星流更亮,"看得清水滴")
   rough: 0.08,       // 镜面锐化(0.45 磨砂→0.08 近纯镜面,根治塑料感;512 探针+mip 不露块)
   lookAtY: 0.05,     // 运行时相机注视点(scene.json camera.center 是编辑器残值,同 santi 教训;
                      // 依据=preview 里时钟与水滴同轴居中、水滴略低于中心)
-  tunnel: 0.66,      // 圆柱材质亮度(2026-07-13:1.2→0.66,背景星流更黑暗深邃)
-  cubeBoost: 4.0,    // 反射探针里的隧道壁增亮(2026-07-13 二次:6→4,反射消失点不再过亮触发泛光)
+  tunnel: 1.75,      // 圆柱材质亮度(2026-07-19 四轮定稿:1.45→1.75,星流亮度对齐壁纸 preview;嫌亮/暗只拧这一个)
+  cubeBoost: 4.5,    // 反射探针里的隧道壁增亮(2026-07-19 二轮:6 高光过曝喂爆 bloom→4.5)
   cursorPx: 1.0,     // 光标像素→WE cursorWorldPosition 比例
   text: 1.0,         // 文字尺寸整体缩放
 };
@@ -355,7 +355,7 @@ const godraysPass = new GodraysPass();
 // composer.addPass(godraysPass);
 const gradePass = new GradePass();
 composer.addPass(gradePass);
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), CFG.hdr * CAL.bloom, 0.9, 2.2);  // 阈值 1.0→2.2(2026-07-13:反射消失点不再炸白团)
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), CFG.hdr * CAL.bloom, 0.55, 2.2);  // 半径 0.9→0.55(2026-07-19:辉光收拢贴水滴轮廓,不再方块扩散)
 composer.addPass(bloomPass);   // WE:scene HDR 泛光最后作用(效果层吃泛光前画面)
 
 /* ==================== 音频(16 段频谱,WE 公式原样) ==================== */

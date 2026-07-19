@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 import Galaxy from './components/Galaxy/Galaxy';
 import ClickSpark from './components/ClickSpark/ClickSpark';
 import HudNav from './components/HudNav/HudNav';
+import SiteLoader from './components/SiteLoader/SiteLoader';
 import Home from './pages/Home';
 import Fleet from './pages/Fleet';
 import Chaos from './pages/Chaos';
@@ -94,20 +95,6 @@ function Chrome() {
     prevRef.current = location.pathname;
   }
 
-  // 空闲预取黑暗森林 8K 背景(已压至 ~210KB),进页前即缓存,消除首次加载等待
-  useEffect(() => {
-    const preload = () => {
-      const img = new Image();
-      img.src = `${import.meta.env.BASE_URL}assets/wp/sky8k.webp`;
-    };
-    if ('requestIdleCallback' in window) {
-      const id = requestIdleCallback(preload, { timeout: 3000 });
-      return () => cancelIdleCallback(id);
-    }
-    const t = setTimeout(preload, 1500);
-    return () => clearTimeout(t);
-  }, []);
-
   return (
     <ClickSpark sparkColor="#FFCBB1" sparkRadius={22} sparkCount={8} duration={450}>
       {/* overflow-hidden:根容器不产生滚动(overflow-x-hidden 会隐式把 y 变 auto,干扰滚轮翻页判定) */}
@@ -147,6 +134,10 @@ function Chrome() {
             </Routes>
           </div>
         </main>
+
+        {/* 首次进站加载遮罩:预载各模块关键资源+进度条,结束后后台预取大文件
+            (原 requestIdleCallback 预取 sky8k 的逻辑已并入 SiteLoader 清单) */}
+        <SiteLoader />
       </div>
     </ClickSpark>
   );
