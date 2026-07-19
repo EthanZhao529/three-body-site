@@ -36,15 +36,15 @@ const CFG = {
 };
 /* WE↔three 量纲标定(唯一允许手调的旋钮,逐项对照桌面壁纸) */
 const CAL = {
-  bloom: 1.2,        // WE bloomhdrstrength=0.3 → UnrealBloom strength = 0.3×此值(2026-07-19:2.0 高光炸成方块 mip 白团→1.2)
+  bloom: 4.0,        // WE bloomhdrstrength=0.3 → UnrealBloom strength = 0.3×此值(2026-07-19 八轮:3.0→4.0,封顶后能量有界,柔光更饱满)
   yawSign: -1,       // WE 偏航方向 ↔ three.js 旋向(左右手系差异)
   light: 2.2,       // WE 平行光 9.84/8.95 ×brightness4 → three 标定
-  env: 4.2,          // 反射强度(2026-07-19 三轮:3.2→4.2,水滴镜面本体反射星流更亮,"看得清水滴")
+  env: 8.0,          // 反射强度(2026-07-19 八轮:6→8,菲涅尔边缘高光更亮,轮廓照亮如 preview)
   rough: 0.08,       // 镜面锐化(0.45 磨砂→0.08 近纯镜面,根治塑料感;512 探针+mip 不露块)
   lookAtY: 0.05,     // 运行时相机注视点(scene.json camera.center 是编辑器残值,同 santi 教训;
                      // 依据=preview 里时钟与水滴同轴居中、水滴略低于中心)
   tunnel: 1.75,      // 圆柱材质亮度(2026-07-19 四轮定稿:1.45→1.75,星流亮度对齐壁纸 preview;嫌亮/暗只拧这一个)
-  cubeBoost: 4.5,    // 反射探针里的隧道壁增亮(2026-07-19 二轮:6 高光过曝喂爆 bloom→4.5)
+  cubeBoost: 2.2,    // 反射探针里的隧道壁增亮(2026-07-19 八轮:1.6→2.2;方块真凶已证实是 bloom mip 过曝,GradePass 封顶后此值只管水滴反射亮度)
   cursorPx: 1.0,     // 光标像素→WE cursorWorldPosition 比例
   text: 1.0,         // 文字尺寸整体缩放
 };
@@ -327,14 +327,15 @@ class GradePass extends Pass {
     this.uB2 = { value: 0 };
     this.uTint = { value: new THREE.Color(1, 1, 1) };
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { tD: { value: null }, uB1: this.uB1, uB2: this.uB2, uTint: this.uTint },
+      uniforms: { tD: { value: null }, uB1: this.uB1, uB2: this.uB2, uTint: this.uTint, uCap: { value: 12.0 } },
       vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }',
       fragmentShader: `
-        varying vec2 vUv; uniform sampler2D tD; uniform float uB1,uB2; uniform vec3 uTint;
+        varying vec2 vUv; uniform sampler2D tD; uniform float uB1,uB2,uCap; uniform vec3 uTint;
         void main(){
           vec4 c=texture2D(tD,vUv);
           c.rgb*=(uB1+1.0)*(uB2+1.0);
           c.rgb*=uTint;
+          c.rgb=min(c.rgb,vec3(uCap));   // 2026-07-19 六轮:HDR 封顶——水滴高光天文数字喂进 bloom 高层 mip 会被双线性放大成方块反光,封顶后辉光圆润(星流亮度<2 不受影响)
           gl_FragColor=c;
         }`,
     });
@@ -355,7 +356,7 @@ const godraysPass = new GodraysPass();
 // composer.addPass(godraysPass);
 const gradePass = new GradePass();
 composer.addPass(gradePass);
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), CFG.hdr * CAL.bloom, 0.55, 2.2);  // 半径 0.9→0.55(2026-07-19:辉光收拢贴水滴轮廓,不再方块扩散)
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), CFG.hdr * CAL.bloom, 0.4, 1.0);  // 阈值 2.2→1.0/半径0.4(2026-07-19 七轮:轮廓高光+星流都进柔光,HDR 已封顶不会再炸方块)
 composer.addPass(bloomPass);   // WE:scene HDR 泛光最后作用(效果层吃泛光前画面)
 
 /* ==================== 音频(16 段频谱,WE 公式原样) ==================== */
